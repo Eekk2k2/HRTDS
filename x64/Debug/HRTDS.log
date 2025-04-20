@@ -1,5 +1,0 @@
-﻿  HRTDS.cpp
-E:\Projects\HRTDS\HRTDS\HRTDS.h(807,15): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-  (compiling source file 'HRTDS.cpp')
-  
-  HRTDS.vcxproj -> E:\Projects\HRTDS\x64\Debug\HRTDS.lib
