@@ -16,6 +16,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="LICENSE" />
+    <None Include=".gitignore" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="HRTDS.h">
