@@ -183,6 +183,7 @@ namespace hrtds {
 	enum HRTDS_STANDARD_IDENTIFIER_TYPES {
 		// References a structure of data types
 		IDENTIFIER_STRUCT,
+		IDENTIFIER_STRUCT_DEFINITION,
 
 		// References data types
 		IDENTIFIER_STRING,
@@ -354,7 +355,7 @@ namespace hrtds {
 		+ utils::HRTDS_IDENTIFIER
 		+ utils::HRTDS_ASSIGNMENT
 		+ utils::HRTDS_TERMINATOR
-		+ utils::HRTDS_LIST_SEPARATOR
+		//+ utils::HRTDS_LIST_SEPARATOR
 	);
 
 	inline int EncodePair(char begin, char end) {
@@ -363,26 +364,26 @@ namespace hrtds {
 
 	static std::unordered_map<int, HRTDS_TOKEN_TYPE> CharToTokenMap{
 		// &...&
-		{ EncodePair(utils::HRTDS_IDENTIFIER, utils::HRTDS_IDENTIFIER), HRTDS_TOKEN_TYPE::IDENTIFIER },
+		{ EncodePair(utils::HRTDS_IDENTIFIER, utils::HRTDS_IDENTIFIER), HRTDS_TOKEN_TYPE::IDENTIFIER	},
 		// &...:
-		{ EncodePair(utils::HRTDS_IDENTIFIER, utils::HRTDS_ASSIGNMENT), HRTDS_TOKEN_TYPE::NAME },
+		{ EncodePair(utils::HRTDS_IDENTIFIER, utils::HRTDS_ASSIGNMENT), HRTDS_TOKEN_TYPE::NAME			},
 
 		// :...;
-		{ EncodePair(utils::HRTDS_ASSIGNMENT, utils::HRTDS_TERMINATOR), HRTDS_TOKEN_TYPE::VALUE_SINGLE },
+		{ EncodePair(utils::HRTDS_ASSIGNMENT, utils::HRTDS_TERMINATOR), HRTDS_TOKEN_TYPE::VALUE_SINGLE	},
 
 		// :...,
-		{ EncodePair(utils::HRTDS_ASSIGNMENT, utils::HRTDS_LIST_SEPARATOR), HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_START },
+		{ EncodePair(utils::HRTDS_ASSIGNMENT,		utils::HRTDS_LIST_SEPARATOR ),	HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_START	},
 		// ,...,
-		{ EncodePair(utils::HRTDS_LIST_SEPARATOR, utils::HRTDS_LIST_SEPARATOR), HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT },
+		{ EncodePair(utils::HRTDS_LIST_SEPARATOR,	utils::HRTDS_LIST_SEPARATOR	),	HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT		},
 		// ,...;
-		{ EncodePair(utils::HRTDS_LIST_SEPARATOR, utils::HRTDS_TERMINATOR), HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_END },
+		{ EncodePair(utils::HRTDS_LIST_SEPARATOR,	utils::HRTDS_TERMINATOR		),	HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_END	},
 
 		// :{&
-		{ EncodePair(utils::HRTDS_ASSIGNMENT, utils::HRTDS_IDENTIFIER), HRTDS_TOKEN_TYPE::STRUCT_BEGIN },
+		{ EncodePair(utils::HRTDS_ASSIGNMENT, utils::HRTDS_IDENTIFIER),	HRTDS_TOKEN_TYPE::STRUCT_BEGIN		},
 		// &...;
-		{ EncodePair(utils::HRTDS_IDENTIFIER, utils::HRTDS_TERMINATOR), HRTDS_TOKEN_TYPE::STRUCT_FIELD_NAME },
+		{ EncodePair(utils::HRTDS_IDENTIFIER, utils::HRTDS_TERMINATOR),	HRTDS_TOKEN_TYPE::STRUCT_FIELD_NAME	},
 		// ;};
-		{ EncodePair(utils::HRTDS_TERMINATOR, utils::HRTDS_TERMINATOR), HRTDS_TOKEN_TYPE::STRUCT_END }
+		{ EncodePair(utils::HRTDS_TERMINATOR, utils::HRTDS_TERMINATOR),	HRTDS_TOKEN_TYPE::STRUCT_END		}
 	};
 
 	class HRTDS_VALUE {
@@ -525,13 +526,17 @@ namespace hrtds {
 		void Parse(std::string content);
 
 	private:
+		std::vector<HRTDS_TOKEN> TokensizeArray(HRTDS_TOKEN arrayToken);
+		std::vector<HRTDS_TOKEN> TokenizeTuple(HRTDS_TOKEN tupleToken);
+
 		HRTDS_IDENTIFIER_PAIR RetrieveIdentifier(const std::string& identifierString);
 
-		const HRTDS_STANDARD_IDENTIFIER_BY_NAME_MAP standardIdentifierByNameMap{
-		{ "string", IDENTIFIER_STRING },
-		{ "bool", IDENTIFIER_BOOL },
-		{ "int", IDENTIFIER_INT },
-		{ "float", IDENTIFIER_FLOAT },
+		const HRTDS_STANDARD_IDENTIFIER_BY_NAME_MAP standardIdentifierByNameMap 
+		{
+			{ "string", IDENTIFIER_STRING	},
+			{ "bool",	IDENTIFIER_BOOL		},
+			{ "int",	IDENTIFIER_INT		},
+			{ "float",	IDENTIFIER_FLOAT	},
 		};
 
 		HRTDS_LAYOUT_BY_STRUCT_KEY_MAP layoutByStructKeyMap;

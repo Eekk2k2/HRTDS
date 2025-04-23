@@ -134,24 +134,25 @@ void hrtds::HRTDS_VALUE::Parse_Structure_Tuple(std::vector<HRTDS_TOKEN>& tokens,
 		HRTDS_TOKEN_TYPE currentTokenType = tokens[i].tokenType;
 		switch (currentTokenType)
 		{
-		case hrtds::VALUE_LIST_ELEMENT_START:
-		case hrtds::VALUE_LIST_ELEMENT: continue;
+			case hrtds::VALUE_SINGLE:					// : (value1);
+			case hrtds::VALUE_LIST_ELEMENT_START:		// : (value1, ...);
+			case hrtds::VALUE_LIST_ELEMENT: continue;	// : (..., valueN, ...);
 
-		case hrtds::VALUE_LIST_ELEMENT_END: {
-			valueTokenEnd = i;
+			case hrtds::VALUE_LIST_ELEMENT_END: {		// : (.., valueN);
+				valueTokenEnd = i;
 
-			// Break the for-loop
-			i = tokens.size();
-			break;
-		}
+				// Break the for-loop
+				i = tokens.size();
+				break;
+			}
 
-		default: {
-			std::cerr << "Failed to parse tuple as token[" << i << "] " <<
-				", which is token '" << tokens[i].content << "' "
-				<< "is not a valid list element." << std::endl;
+			default: {
+				std::cerr << "Failed to parse tuple as token[" << i << "] " <<
+					", which is token '" << tokens[i].content << "' "
+					<< "is not a valid list element." << std::endl;
 
-			return;
-		}
+				return;
+			}
 		}
 	}
 
@@ -183,18 +184,29 @@ void hrtds::HRTDS_VALUE::Parse_Structure_Tuple(std::vector<HRTDS_TOKEN>& tokens,
 		std::string valueString = tokens[i].content;
 		switch (tokens[i].tokenType)
 		{
-		case HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_START: {
-			valueString.erase(valueString.begin());
+			// (value1) -> value1
+			case HRTDS_TOKEN_TYPE::VALUE_SINGLE: {
+				valueString.erase(valueString.begin());
+				valueString.erase(valueString.end());
 
-			break;
-		}
-		case HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_END: {
-			valueString.erase(valueString.end());
+				break;
+			}
 
-			break;
-		}
+			// (value1 -> value1
+			case HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_START: {
+				valueString.erase(valueString.begin());
 
-		default: break;
+				break;
+			}
+
+			// valueN) -> valueN
+			case HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_END: {
+				valueString.erase(valueString.end());
+
+				break;
+			}
+
+			default: break;
 		}
 
 		tokens[i].content = valueString;
@@ -202,7 +214,7 @@ void hrtds::HRTDS_VALUE::Parse_Structure_Tuple(std::vector<HRTDS_TOKEN>& tokens,
 		size_t localI = i - valueTokenStart;
 		this->structures[index][layout[localI].fieldName] = HRTDS_VALUE(
 			tokens,
-			valueTokenStart,
+			i,
 
 			layout[localI].isArray,
 			layout[localI].fieldName,
@@ -283,7 +295,7 @@ void hrtds::HRTDS::Parse(std::string content)
 	// Remove all whitesapce (whitespace is only cared for inside strings
 	content.erase(std::remove_if(content.begin(), content.end(), std::isspace), content.end());
 
-	// Tokenize file
+	// Tokenize file (first pass)
 	std::vector<HRTDS_TOKEN> tokens;
 	for (size_t i = 0; i < content.size(); i++)
 	{
@@ -291,27 +303,34 @@ void hrtds::HRTDS::Parse(std::string content)
 		tokenEnd = tokenEnd == content.npos ? content.size() : tokenEnd;
 
 		std::string token = content.substr(i, tokenEnd - i);
-		if (!token.empty()) {
-			char beginChar = content[i - 1];
-			char endChar = content[tokenEnd];
+		if (token.empty()) {
+			i = tokenEnd;
 
-			std::unordered_map<int, HRTDS_TOKEN_TYPE>::iterator typeIt
-				= CharToTokenMap.find(EncodePair(beginChar, endChar));
-
-			if (typeIt == CharToTokenMap.end()) {
-				std::cerr << "Could not specify token: '" << token << "' "
-					<< "because the token-specifiers did not specify a type"
-					<< " '" << beginChar << "', '" << endChar << "'" << std::endl;
-
-				return;
-			}
-
-			// Check if for this <identifier>[]
-			//         ^
-			bool isArray = token[token.size() - 1] == utils::HRTDS_END_ARRAY;
-
-			tokens.push_back({ typeIt->second, isArray, token });
+			continue;
 		}
+
+		char beginChar = content[i - 1];
+		char endChar = content[tokenEnd];
+
+		std::unordered_map<int, HRTDS_TOKEN_TYPE>::iterator typeIt
+			= CharToTokenMap.find(EncodePair(beginChar, endChar));
+
+		if (typeIt == CharToTokenMap.end()) {
+			std::cerr << "Could not specify token: '" << beginChar << token << endChar << "' "
+				<< "because the token-specifiers did not specify a type"
+				<< " '" << beginChar << "', '" << endChar << "'" << std::endl;
+
+			return;
+		}
+
+		// Check if for this <identifier>[]
+		//								  ^
+		bool isArray = token[token.size() - 1] == utils::HRTDS_END_ARRAY;
+
+		// Special tokenization happens if we are an array or a tuple
+		// ...
+
+		tokens.push_back({ typeIt->second, isArray, token });
 
 		i = tokenEnd;
 	}
@@ -320,7 +339,7 @@ void hrtds::HRTDS::Parse(std::string content)
 	for (size_t i = 0; i < tokens.size(); i++)
 	{
 		// Checks for this "<index>"
-		//   ^
+		//				   ^
 		if (tokens[i].content[0] == utils::HRTDS_QUOTE) {
 			std::string keyString = tokens[i].content; // Is this "<index>"
 			keyString.erase(keyString.begin()); // Remove this ---> "<index>"
@@ -362,10 +381,8 @@ void hrtds::HRTDS::Parse(std::string content)
 
 		HRTDS_IDENTIFIER_PAIR identifierPair = this->RetrieveIdentifier(cleanIdentifier);
 
-		if (cleanIdentifier != "struct" && identifierPair.type == IDENTIFIER_STRUCT && identifierPair.structureKey.empty()) {
-			std::cerr << "Identifier '" << cleanIdentifier << "' not recognized" << std::endl;
-
-			return;
+		if (identifierPair.type == IDENTIFIER_STRUCT && identifierPair.structureKey == "") {
+			return; // Error message printed in RetrieveIdentifier
 		}
 
 		// Next token
@@ -384,7 +401,7 @@ void hrtds::HRTDS::Parse(std::string content)
 		// Next token (if everything has gone as expected, this should be a value token)
 		i += 1;
 
-		if (identifierPair.type == IDENTIFIER_STRUCT && identifierPair.structureKey.empty()) {
+		if (identifierPair.type == IDENTIFIER_STRUCT_DEFINITION) {
 			this->RegisterNewLayout(tokens, nameToken.content, i);
 
 			continue;
@@ -400,31 +417,55 @@ void hrtds::HRTDS::Parse(std::string content)
 	}
 }
 
+std::vector<hrtds::HRTDS_TOKEN> hrtds::HRTDS::TokensizeArray(HRTDS_TOKEN arrayToken)
+{
+	return std::vector<HRTDS_TOKEN>();
+}
+
+std::vector<hrtds::HRTDS_TOKEN> hrtds::HRTDS::TokenizeTuple(HRTDS_TOKEN tupleToken)
+{
+	return std::vector<HRTDS_TOKEN>();
+}
+
 hrtds::HRTDS_IDENTIFIER_PAIR hrtds::HRTDS::RetrieveIdentifier(const std::string& identifierString) {
+	// First of all we check if its not a struct defining identifier
+	if (identifierString == "struct") {
+		return HRTDS_IDENTIFIER_PAIR { 
+			HRTDS_STANDARD_IDENTIFIER_TYPES::IDENTIFIER_STRUCT_DEFINITION,
+			""
+		};
+	}
+	
+	// Then we search for the core identifiers (those linked to a specific data type)
 	HRTDS_STANDARD_IDENTIFIER_BY_NAME_MAP::const_iterator typeNameIt =
 		this->standardIdentifierByNameMap.find(identifierString);
 
 	if (typeNameIt != this->standardIdentifierByNameMap.end()) {
 		return HRTDS_IDENTIFIER_PAIR{
-		typeNameIt->second,
-		""
+			typeNameIt->second,
+			""
 		};
 	}
 
+	// Then we serach for the identifier in the custom structures list
 	HRTDS_LAYOUT_BY_STRUCT_KEY_MAP::const_iterator structNameIt =
 		this->layoutByStructKeyMap.find(identifierString);
 
 	if (structNameIt != this->layoutByStructKeyMap.end()) {
 		return HRTDS_IDENTIFIER_PAIR{
-		HRTDS_STANDARD_IDENTIFIER_TYPES::IDENTIFIER_STRUCT,
-		structNameIt->first
+			HRTDS_STANDARD_IDENTIFIER_TYPES::IDENTIFIER_STRUCT,
+			structNameIt->first
 		};
 	}
 
-	// TODO : Error handling
+	// Here we did not find anything
+	std::cerr << "Could not find identifier '" << identifierString << "'. "
+		<< "If you meant to reference a user-defined structure, make sure its definition comes before the use" << std::endl;
+	
+	// Error-designator (IDENTIFIER_STRUCT with an emtpy StructureKey)
 	return HRTDS_IDENTIFIER_PAIR{
 		HRTDS_STANDARD_IDENTIFIER_TYPES::IDENTIFIER_STRUCT,
-		"" // Error-designator
+		"" 
 	};
 }
 
