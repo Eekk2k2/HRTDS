@@ -1,5 +1,6 @@
 #include "HRTDS.h"
 
+// https://stackoverflow.com/questions/216823/how-to-trim-a-stdstring
 void hrtds::utils::Trim(std::string& input)
 {
 	input.erase(input.begin(), std::find_if(input.begin(), input.end(), [](unsigned char chr) {
@@ -11,158 +12,190 @@ void hrtds::utils::Trim(std::string& input)
 	}).base(), input.end());
 }
 
-void hrtds::HRTDS_VALUE::Set(std::vector<HRTDS_TOKEN>& tokens, size_t& valueStart, bool isArray, HRTDS_FIELD_NAME fieldName, HRTDS_IDENTIFIER_PAIR identifierPair, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap)
+size_t hrtds::utils::FindAtSameLevel(const std::string& input, char character, size_t from = 0)
 {
-	// Update old data
-	this->identifierPair = identifierPair;
-	this->isArray = isArray;
-	this->name = fieldName;
+	// Going down level means going into another list:
+	//  
+	//				[..., ..., (..., ...), ..., ...]
+	//				 0		    \ 1        / 0
+	//
+	// In this library both tuples and arrays are considered lists
 
-	// Clear old data
-	this->data = std::vector<std::vector<std::byte>>();
-	this->structures = std::vector<HRTDS_STRUCTURE>();
+	// Finding the next character at the same level entails finding 
+	// the next character where localLevel is equal to 0. We go out 
+	// of scope if localLevel ever goes below zero.
+	int localLevel = 0;
+	for (size_t i = from; i < input.size(); i++)
+	{
+		char reference = input[i];
 
-	// Parse new data
-	if (this->isArray) {
-		this->Parse_Array(tokens, valueStart, identifierPair, layoutByStructKeyMap);
+		// Going down '\'
+		if (reference == HRTDS_BEGIN_ARRAY || reference == HRTDS_BEGIN_TUPLE) {
+			localLevel++;
+		}
 
-		return;
+		// Going up '/'
+		else if (reference == HRTDS_END_ARRAY || reference == HRTDS_END_TUPLE) {
+			localLevel--;
+
+			// Out of scope (met the end)
+			if (localLevel < 0) {
+				return input.npos;
+			}
+		}
+
+		// We found a matching character
+		else if (reference == character) {
+			if (localLevel != 0) {
+				continue;
+			}
+
+			return i;
+		}
 	}
 
-	if (this->identifierPair.type == HRTDS_STANDARD_IDENTIFIER_TYPES::IDENTIFIER_STRUCT) {
-		this->Parse_Structure_Tuple(
-			tokens, valueStart, identifierPair.structureKey, layoutByStructKeyMap, 0
-		);
-
-		return;
-	}
-
-	this->Parse_Value(tokens[valueStart].content, identifierPair.type, 0);
+	// None found
+	return input.npos;
 }
 
-void hrtds::HRTDS_VALUE::Parse_Array(std::vector<HRTDS_TOKEN>& tokens, size_t& valueTokenStart, const HRTDS_IDENTIFIER_PAIR& identifierPair, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap) 
+hrtds::HRTDS_VALUE::HRTDS_VALUE(std::string content, HRTDS_IDENTIFIER_TYPE valueType)
 {
-	// Verify and retreive
-	size_t valueTokenEnd = 0;
-	for (size_t i = valueTokenStart; i < tokens.size(); i++)
-	{
-		HRTDS_TOKEN_TYPE currentTokenType = tokens[i].tokenType;
-		switch (currentTokenType)
-		{
-		case hrtds::VALUE_LIST_ELEMENT_START:
-		case hrtds::VALUE_LIST_ELEMENT: continue;
+	this->ParseValue(content, valueType);
+}
 
-		case hrtds::VALUE_LIST_ELEMENT_END: {
-			valueTokenEnd = i;
+hrtds::HRTDS_VALUE::HRTDS_VALUE(std::vector<HRTDS_TOKEN>& tokens, size_t& cursor, const HRTDS_IDENTIFIER_PAIR& arrayIdentifier, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap)
+{
+	this->ParseArray(tokens, cursor, arrayIdentifier, layoutByStructKeyMap);
+}
 
-			// Break the for-loop
-			i = tokens.size();
-			break;
-		}
+hrtds::HRTDS_VALUE::HRTDS_VALUE(std::vector<HRTDS_TOKEN>& tokens, size_t& cursor, const HRTDS_STRUCTURE_KEY& structureKey, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap)
+{
+	this->ParseTuple(tokens, cursor, structureKey, layoutByStructKeyMap);
+}
 
-		default: {
-			std::cerr << "Failed to parse array as token[" << i << "] " <<
-				", which is token '" << tokens[i].content << "' "
-				<< "is not a valid list element." << std::endl;
+hrtds::HRTDS_VALUE::HRTDS_VALUE(std::vector<HRTDS_TOKEN>& tokens, size_t& cursor, const HRTDS_IDENTIFIER_PAIR& identifierPair, bool isArray, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap)
+{
+	this->Set(tokens, cursor, identifierPair, isArray, layoutByStructKeyMap);
+}
 
-			return;
-		}
-		}
+hrtds::HRTDS_VALUE& hrtds::HRTDS_VALUE::operator[](size_t index)
+{
+	return this->array.at(index);
+}
+
+hrtds::HRTDS_VALUE& hrtds::HRTDS_VALUE::operator[](std::string key)
+{
+	return this->structure.at(key);
+}
+
+void hrtds::HRTDS_VALUE::Set(std::vector<HRTDS_TOKEN>& tokens, size_t& cursor, const HRTDS_IDENTIFIER_PAIR& identifierPair, bool isArray, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap)
+{
+	// Clear old data
+	this->data = std::vector<std::byte>();
+	this->structure = HRTDS_STRUCTURE();
+	this->array = std::vector<HRTDS_VALUE>();
+
+	// Set new data
+	if (isArray) {
+		this->ParseArray(tokens, cursor, identifierPair, layoutByStructKeyMap); return;
 	}
 
-	if (valueTokenEnd == 0) {
-		std::cerr << "Failed to find the last element of an array starting at token: " << valueTokenStart << std::endl;
+	bool isStructure = identifierPair.type == IDENTIFIER_STRUCT;
+	if (isStructure) {
+		this->ParseTuple(tokens, cursor, identifierPair.structureKey, layoutByStructKeyMap); return;
+	}
+
+	this->ParseValue(tokens[cursor].content, identifierPair.type);
+}
+
+void hrtds::HRTDS_VALUE::ParseValue(std::string content, HRTDS_IDENTIFIER_TYPE valueType)
+{
+	SetBytes[valueType](content, this->data);
+}
+
+void hrtds::HRTDS_VALUE::ParseArray(std::vector<HRTDS_TOKEN>& tokens, size_t& cursor, const HRTDS_IDENTIFIER_PAIR& arrayIdentifier, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap)
+{
+	// The first token of an array should always be VALUE_ARRAY_BEGIN
+	size_t arrayTokenStart = cursor;
+	HRTDS_TOKEN& arrayBeginToken = tokens[arrayTokenStart];
+	if (arrayBeginToken.tokenType != HRTDS_TOKEN_TYPE::VALUE_ARRAY_BEGIN) {
+		std::cerr << "Field with an array identifier '&" << tokens[arrayTokenStart - 2].content << "[]&'"
+			<< " did not have an array value ': [...]'" << std::endl;
 
 		return;
 	}
 
-	// Set values
-	bool isStructure = identifierPair.type == HRTDS_STANDARD_IDENTIFIER_TYPES::IDENTIFIER_STRUCT;
-	for (size_t i = valueTokenStart; i < (valueTokenEnd + 1); i++)
+	// Move to next token
+	cursor++;
+
+	// Now march through the tokens array until VALUE_ARRAY_END is found
+	std::vector<std::vector<std::byte>> data;
+
+	size_t arrayTokenEnd = 0;
+	bool isOfStructures = arrayIdentifier.type == HRTDS_IDENTIFIER_TYPE::IDENTIFIER_STRUCT;
+	for (size_t i = cursor; i < tokens.size(); i++)
 	{
-		if (isStructure) {
-			this->Parse_Structure_Tuple(
-				tokens,
-				valueTokenStart,
-				identifierPair.structureKey,
-				layoutByStructKeyMap,
-				i
-			);
+		HRTDS_TOKEN_TYPE currentType = tokens[i].tokenType;
 
-			continue;
-		}
-
-		std::string valueString = tokens[i].content;
-		switch (tokens[i].tokenType)
-		{
-		case HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_START: {
-			valueString.erase(valueString.begin());
-
-			break;
-		}
-		case HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_END: {
-			valueString.erase(valueString.end());
+		// Break at found end
+		if (currentType == HRTDS_TOKEN_TYPE::VALUE_ARRAY_END) {
+			arrayTokenEnd = i;
 
 			break;
 		}
 
-		default: break;
+		// Check if its a nested array
+		else if (currentType == HRTDS_TOKEN_TYPE::VALUE_ARRAY_BEGIN) {
+			HRTDS_VALUE array = HRTDS_VALUE(tokens, i, arrayIdentifier, layoutByStructKeyMap);
+			this->array.push_back(array);
 		}
 
-		this->Parse_Value(valueString, identifierPair.type, (i - valueTokenStart));
+		// or if its a nested tuple
+		else if (currentType == HRTDS_TOKEN_TYPE::VALUE_TUPLE_BEGIN) {
+			HRTDS_VALUE structure = HRTDS_VALUE(tokens, i, arrayIdentifier.structureKey, layoutByStructKeyMap);
+			this->array.push_back(structure);
+		}
+
+		// or maybe just a single value
+		else if (currentType == HRTDS_TOKEN_TYPE::VALUE_ARRAY_ELEMENT) {
+			HRTDS_VALUE arrayElement = HRTDS_VALUE(tokens[i].content, arrayIdentifier.type);
+			this->array.push_back(arrayElement);
+		}
+
+		// if not any of these then theres something fishy
+		else {
+			std::cerr << "Unexpected token type " << static_cast<int>(currentType)
+				<< " at index " << i << std::endl;
+		}
+	}
+
+	// Check if we found an end
+	if (arrayTokenEnd == 0) {
+		std::cerr << "Failed to find the end of an array" << std::endl;
+
+		return;
 	}
 
 	// Output
-	valueTokenStart = valueTokenEnd;
+	cursor = arrayTokenEnd;
 }
 
-void hrtds::HRTDS_VALUE::Parse_Value(std::string value, HRTDS_STANDARD_IDENTIFIER_TYPES valueType, size_t index)
+void hrtds::HRTDS_VALUE::ParseTuple(std::vector<HRTDS_TOKEN>& tokens, size_t& cursor, const HRTDS_STRUCTURE_KEY& structureKey, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap)
 {
-	if (index + 1 != this->data.size()) {
-		this->data.resize(index + 1);
-	}
-
-	SetBytes[valueType](value, this->data[index]);
-}
-
-void hrtds::HRTDS_VALUE::Parse_Structure_Tuple(std::vector<HRTDS_TOKEN>& tokens, size_t& valueTokenStart, const HRTDS_STRUCTURE_KEY& structureKey, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap, size_t index) 
-{
-	// Verify and retreive
-	size_t valueTokenEnd = 0;
-	for (size_t i = valueTokenStart; i < tokens.size(); i++)
-	{
-		HRTDS_TOKEN_TYPE currentTokenType = tokens[i].tokenType;
-		switch (currentTokenType)
-		{
-			case hrtds::VALUE_SINGLE:					// : (value1);
-			case hrtds::VALUE_LIST_ELEMENT_START:		// : (value1, ...);
-			case hrtds::VALUE_LIST_ELEMENT: continue;	// : (..., valueN, ...);
-
-			case hrtds::VALUE_LIST_ELEMENT_END: {		// : (.., valueN);
-				valueTokenEnd = i;
-
-				// Break the for-loop
-				i = tokens.size();
-				break;
-			}
-
-			default: {
-				std::cerr << "Failed to parse tuple as token[" << i << "] " <<
-					", which is token '" << tokens[i].content << "' "
-					<< "is not a valid list element." << std::endl;
-
-				return;
-			}
-		}
-	}
-
-	if (valueTokenEnd == 0) {
-		std::cerr << "Failed to find the last element of an array starting at token: " << valueTokenStart << std::endl;
+	// The first token of a tuple should always be VALUE_TUPLE_BEGIN
+	size_t tupleTokenStart = cursor;
+	HRTDS_TOKEN& tupleBeginToken = tokens[tupleTokenStart];
+	if (tupleBeginToken.tokenType != HRTDS_TOKEN_TYPE::VALUE_TUPLE_BEGIN) {
+		std::cerr << "Field with a tuple identifier '&" << tokens[tupleTokenStart - 2].content << "([])&'"
+			<< " did not have a tuple value ': (...)'" << std::endl;
 
 		return;
 	}
 
-	// Retrieve layout
+	// Move to next token
+	cursor++;
+
+	// Retrieve the tuple's layout
 	HRTDS_LAYOUT_BY_STRUCT_KEY_MAP::const_iterator layoutIt =
 		layoutByStructKeyMap.find(structureKey);
 
@@ -174,58 +207,246 @@ void hrtds::HRTDS_VALUE::Parse_Structure_Tuple(std::vector<HRTDS_TOKEN>& tokens,
 
 	HRTDS_LAYOUT layout = layoutIt->second;
 
-	// Set data
-	if (index + 1 != this->data.size()) {
-		this->structures.resize(index + 1);
-	}
-
-	for (size_t i = valueTokenStart; i < (valueTokenEnd + 1); i++)
+	// Now march through the tokens array until VALUE_TUPLE_END is found
+	size_t tupleTokenEnd = 0, j = 0;
+	for (size_t i = cursor; i < tokens.size(); i++)
 	{
-		std::string valueString = tokens[i].content;
-		switch (tokens[i].tokenType)
-		{
-			// (value1) -> value1
-			case HRTDS_TOKEN_TYPE::VALUE_SINGLE: {
-				valueString.erase(valueString.begin());
-				valueString.erase(valueString.end());
+		HRTDS_TOKEN_TYPE currentType = tokens[i].tokenType;
 
-				break;
-			}
+		// Break at found end
+		if (currentType == HRTDS_TOKEN_TYPE::VALUE_TUPLE_END) {
+			tupleTokenEnd = i;
 
-			// (value1 -> value1
-			case HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_START: {
-				valueString.erase(valueString.begin());
-
-				break;
-			}
-
-			// valueN) -> valueN
-			case HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_END: {
-				valueString.erase(valueString.end());
-
-				break;
-			}
-
-			default: break;
+			break;
 		}
 
-		tokens[i].content = valueString;
+		// Check if its a nested tuple
+		else if (currentType == HRTDS_TOKEN_TYPE::VALUE_ARRAY_BEGIN) {
+			HRTDS_VALUE structure = HRTDS_VALUE(tokens, i, layout[j].identifierPair, layoutByStructKeyMap);
+			this->structure[layout[j].fieldName] = structure;
 
-		size_t localI = i - valueTokenStart;
-		this->structures[index][layout[localI].fieldName] = HRTDS_VALUE(
-			tokens,
-			i,
+			j++;
+		}
 
-			layout[localI].isArray,
-			layout[localI].fieldName,
-			layout[localI].identifierPair,
-			layoutByStructKeyMap
-		);
+		// or if its a nested array
+		else if (currentType == HRTDS_TOKEN_TYPE::VALUE_TUPLE_BEGIN) {
+			HRTDS_VALUE array = HRTDS_VALUE(tokens, i, layout[j].identifierPair.structureKey, layoutByStructKeyMap);
+			this->structure[layout[j].fieldName] = array;
+
+			j++;
+		}
+
+		// or maybe just a single value
+		else if (currentType == HRTDS_TOKEN_TYPE::VALUE_TUPLE_ELEMENT) {
+			HRTDS_VALUE tupleElement = HRTDS_VALUE(tokens[i].content, layout[j].identifierPair.type);
+			this->structure[layout[j].fieldName] = tupleElement;
+
+			j++;
+		}
+
+		// if not any of these then theres something fishy
+		else {
+			std::cerr << "Unexpected token type " << static_cast<int>(currentType)
+				<< " at index " << i << std::endl;
+		}
+	}
+
+	if (tupleTokenEnd == 0) {
+		std::cerr << "Failed to find the end of a tuple" << std::endl;
+
+		return;
 	}
 
 	// Output
-	valueTokenStart = valueTokenEnd;
+	cursor = tupleTokenEnd;
 }
+
+//void hrtds::HRTDS_VALUE::Set(std::vector<HRTDS_TOKEN>& tokens, size_t& valueStart, bool isArray, HRTDS_FIELD_NAME fieldName, HRTDS_IDENTIFIER_PAIR identifierPair, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap)
+//{
+//	// Update old data
+//	this->identifierPair = identifierPair;
+//	this->isArray = isArray;
+//	this->name = fieldName;
+//
+//	// Clear old data
+//	this->data = std::vector<std::vector<std::byte>>();
+//	this->structures = std::vector<HRTDS_STRUCTURE>();
+//
+//	// Parse new data
+//	if (this->isArray) {
+//		this->Parse_Array(tokens, valueStart, identifierPair, layoutByStructKeyMap);
+//
+//		return;
+//	}
+//
+//	if (this->identifierPair.type == HRTDS_IDENTIFIER_TYPE::IDENTIFIER_STRUCT) {
+//		this->Parse_Structure_Tuple(
+//			tokens, valueStart, identifierPair.structureKey, layoutByStructKeyMap, 0
+//		);
+//
+//		return;
+//	}
+//
+//	this->Parse_Value(tokens[valueStart].content, identifierPair.type, 0);
+//}
+
+//void hrtds::HRTDS_VALUE::Parse_Array(std::vector<HRTDS_TOKEN>& tokens, size_t& valueTokenStart, const HRTDS_IDENTIFIER_PAIR& identifierPair, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap)
+//{
+//	// Verify and retreive
+//	size_t valueTokenEnd = 0;
+//	for (size_t i = valueTokenStart; i < tokens.size(); i++)
+//	{
+//		HRTDS_TOKEN_TYPE currentTokenType = tokens[i].tokenType;
+//		switch (currentTokenType)
+//		{
+//		case hrtds::VALUE_LIST_ELEMENT_START:
+//		case hrtds::VALUE_LIST_ELEMENT: continue;
+//
+//		case hrtds::VALUE_LIST_ELEMENT_END: {
+//			valueTokenEnd = i;
+//
+//			// Break the for-loop
+//			i = tokens.size();
+//			break;
+//		}
+//
+//		default: {
+//			std::cerr << "Failed to parse array as token[" << i << "] " <<
+//				", which is token '" << tokens[i].content << "' "
+//				<< "is not a valid list element." << std::endl;
+//
+//			return;
+//		}
+//		}
+//	}
+//
+//	if (valueTokenEnd == 0) {
+//		std::cerr << "Failed to find the last element of an array starting at token: " << valueTokenStart << std::endl;
+//
+//		return;
+//	}
+//
+//	// Set values
+//	bool isStructure = identifierPair.type == HRTDS_IDENTIFIER_TYPE::IDENTIFIER_STRUCT;
+//	for (size_t i = valueTokenStart; i < (valueTokenEnd + 1); i++)
+//	{
+//		if (isStructure) {
+//			this->Parse_Structure_Tuple(
+//				tokens,
+//				valueTokenStart,
+//				identifierPair.structureKey,
+//				layoutByStructKeyMap,
+//				i
+//			);
+//
+//			continue;
+//		}
+//
+//		std::string valueString = tokens[i].content;
+//		switch (tokens[i].tokenType)
+//		{
+//		case HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_START: {
+//			valueString.erase(valueString.begin());
+//
+//			break;
+//		}
+//		case HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_END: {
+//			valueString.erase(valueString.end());
+//
+//			break;
+//		}
+//
+//		default: break;
+//		}
+//
+//		this->Parse_Value(valueString, identifierPair.type, (i - valueTokenStart));
+//	}
+//
+//	// Output
+//	valueTokenStart = valueTokenEnd;
+//}
+
+//void hrtds::HRTDS_VALUE::Parse_Value(std::string value, HRTDS_IDENTIFIER_TYPE valueType, size_t index)
+//{
+//	if (index + 1 != this->data.size()) {
+//		this->data.resize(index + 1);
+//	}
+//
+//	SetBytes[valueType](value, this->data[index]);
+//}
+
+//void hrtds::HRTDS_VALUE::Parse_Structure_Tuple(std::vector<HRTDS_TOKEN>& tokens, size_t& valueTokenStart, const HRTDS_STRUCTURE_KEY& structureKey, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap, size_t index) 
+//{
+//	// Verify and retreive
+//	size_t valueTokenEnd = 0;
+//	for (size_t i = valueTokenStart; i < tokens.size(); i++)
+//	{
+//		HRTDS_TOKEN_TYPE currentTokenType = tokens[i].tokenType;
+//		switch (currentTokenType)
+//		{
+//			case hrtds::VALUE_SINGLE:					// : (value1);
+//			case hrtds::VALUE_LIST_ELEMENT_START:		// : (value1, ...);
+//			case hrtds::VALUE_LIST_ELEMENT: continue;	// : (..., valueN, ...);
+//
+//			case hrtds::VALUE_LIST_ELEMENT_END: {		// : (.., valueN);
+//				valueTokenEnd = i;
+//
+//				// Break the for-loop
+//				i = tokens.size();
+//				break;
+//			}
+//
+//			default: {
+//				std::cerr << "Failed to parse tuple as token[" << i << "] " <<
+//					", which is token '" << tokens[i].content << "' "
+//					<< "is not a valid list element." << std::endl;
+//
+//				return;
+//			}
+//		}
+//	}
+
+//	if (valueTokenEnd == 0) {
+//		std::cerr << "Failed to find the last element of an array starting at token: " << valueTokenStart << std::endl;
+//
+//		return;
+//	}
+
+//	// Retrieve layout
+//	HRTDS_LAYOUT_BY_STRUCT_KEY_MAP::const_iterator layoutIt =
+//		layoutByStructKeyMap.find(structureKey);
+//
+//	if (layoutIt == layoutByStructKeyMap.end()) {
+//		std::cerr << "Could not find structure '" << structureKey << "'" << std::endl;
+//
+//		return;
+//	}
+//
+//	HRTDS_LAYOUT layout = layoutIt->second;
+
+//	// Set data
+//	if (index + 1 != this->data.size()) {
+//		this->structures.resize(index + 1);
+//	}
+//
+//	for (size_t i = valueTokenStart; i < (valueTokenEnd + 1); i++)
+//	{
+//
+//		size_t localI = i - valueTokenStart;
+//		this->structures[index][layout[localI].fieldName] = HRTDS_VALUE(
+//			tokens,
+//			i,
+//
+//			layout[localI].isArray,
+//			layout[localI].fieldName,
+//			layout[localI].identifierPair,
+//			layoutByStructKeyMap
+//		);
+//	}
+
+//	// Output
+//	valueTokenStart = valueTokenEnd;
+//}
 
 hrtds::HRTDS::HRTDS(const std::string& content)
 {
@@ -328,9 +549,13 @@ void hrtds::HRTDS::Parse(std::string content)
 		bool isArray = token[token.size() - 1] == utils::HRTDS_END_ARRAY;
 
 		// Special tokenization happens if we are an array or a tuple
-		// ...
+		HRTDS_TOKEN parsedToken = { typeIt->second, isArray, token };
 
-		tokens.push_back({ typeIt->second, isArray, token });
+		if (parsedToken.tokenType == VALUE_SINGLE) {
+			std::vector<HRTDS_TOKEN> tokenizedValue = this->TokenizeValue(parsedToken);
+			tokens.insert(tokens.end(), tokenizedValue.begin(), tokenizedValue.end());
+		}
+		else { tokens.push_back(parsedToken); }
 
 		i = tokenEnd;
 	}
@@ -407,31 +632,136 @@ void hrtds::HRTDS::Parse(std::string content)
 			continue;
 		}
 
-		// Verification happens inside the new HRTDS_VALUE(..)
-		this->structure[nameToken.content] = HRTDS_VALUE(
-			tokens, i, identifierToken.isArray, nameToken.content, identifierPair, this->layoutByStructKeyMap
-		);
+		this->structure[nameToken.content] = HRTDS_VALUE(tokens, i, identifierPair, layoutByStructKeyMap);
 
 		// 'i' is modified by the functions above, and is now pointing to the last value token
 		// the for-loop will increment i with one and we will be ready to do this all over again
 	}
 }
 
-std::vector<hrtds::HRTDS_TOKEN> hrtds::HRTDS::TokensizeArray(HRTDS_TOKEN arrayToken)
+//// Verification happens inside the new HRTDS_VALUE(..)
+//this->structure[nameToken.content] = HRTDS_VALUE(
+//	tokens, i, identifierToken.isArray, nameToken.content, identifierPair, this->layoutByStructKeyMap
+//);
+
+std::vector<hrtds::HRTDS_TOKEN> hrtds::HRTDS::TokenizeValue(HRTDS_TOKEN valueToken)
 {
-	return std::vector<HRTDS_TOKEN>();
+	std::string valueContent = valueToken.content;
+
+	// Tokenize as array
+	if (valueContent[0] == utils::HRTDS_BEGIN_ARRAY) {
+		return this->TokenizeArray(valueToken.content);
+	}
+
+	// Tokenize as tuple
+	if (valueContent[0] == utils::HRTDS_BEGIN_TUPLE) {
+		return this->TokenizeTuple(valueToken.content);
+	}
+	
+	return std::vector<HRTDS_TOKEN> { valueToken };
 }
 
-std::vector<hrtds::HRTDS_TOKEN> hrtds::HRTDS::TokenizeTuple(HRTDS_TOKEN tupleToken)
+std::vector<hrtds::HRTDS_TOKEN> hrtds::HRTDS::TokenizeArray(std::string arrayString)
 {
-	return std::vector<HRTDS_TOKEN>();
+	std::vector<HRTDS_TOKEN> tokens;
+
+	// Clean the input
+	arrayString.erase(arrayString.begin());
+	arrayString.pop_back();
+
+	// Signifies the start of an array
+	tokens.push_back({ HRTDS_TOKEN_TYPE::VALUE_ARRAY_BEGIN, false, "" }); 
+
+	// Here we add all the elements
+	for (size_t i = 0; i < arrayString.size(); i++)
+	{
+		size_t nextSeparator = utils::FindAtSameLevel(arrayString, utils::HRTDS_LIST_SEPARATOR, i);
+		nextSeparator = nextSeparator != arrayString.npos ? nextSeparator : arrayString.size();
+		
+		std::string token = arrayString.substr(i, (nextSeparator - i));
+		if (token.empty()) {
+			i = nextSeparator;
+
+			continue;
+		}
+
+		// The current element can be another array or a tuple  [...,[...],...] [...,(...),...]
+		//													         ^               ^
+		if (token[0] == utils::HRTDS_BEGIN_ARRAY) {
+			std::vector<HRTDS_TOKEN> tokenizedArray = this->TokenizeArray(token);
+			tokens.insert(tokens.end(), tokenizedArray.begin(), tokenizedArray.end());
+		}
+		else if (token[0] == utils::HRTDS_BEGIN_TUPLE) {
+			std::vector<HRTDS_TOKEN> tokenizedTuple = this->TokenizeTuple(token);
+			tokens.insert(tokens.end(), tokenizedTuple.begin(), tokenizedTuple.end());
+		}
+		else {
+			HRTDS_TOKEN arrayElementToken = { HRTDS_TOKEN_TYPE::VALUE_ARRAY_ELEMENT, false, token };
+			tokens.push_back(arrayElementToken);
+		}
+
+		i = nextSeparator;
+	}
+
+	// Signifies the end of an array
+	tokens.push_back({ HRTDS_TOKEN_TYPE::VALUE_ARRAY_END, false, "" });
+
+	return tokens;
+}
+
+std::vector<hrtds::HRTDS_TOKEN> hrtds::HRTDS::TokenizeTuple(std::string tupleString)
+{
+	std::vector<HRTDS_TOKEN> tokens;
+
+	// Clean the input (...) -> ...
+	tupleString.erase(tupleString.begin());
+	tupleString.pop_back();
+
+	// Signifies the start of an array
+	tokens.push_back({ HRTDS_TOKEN_TYPE::VALUE_TUPLE_BEGIN, false, "" });
+
+	// Here we add all the elements
+	for (size_t i = 0; i < tupleString.size(); i++)
+	{
+		size_t nextSeparator = utils::FindAtSameLevel(tupleString, utils::HRTDS_LIST_SEPARATOR, i);
+		nextSeparator = nextSeparator != tupleString.npos ? nextSeparator : tupleString.size();
+
+		std::string token = tupleString.substr(i, (nextSeparator - i));
+		if (token.empty()) {
+			i = nextSeparator;
+
+			continue;
+		}
+
+		// The current element can be another tuple or an array  (...,(...),...) (...,[...],...)
+		//													          ^               ^
+		if (token[0] == utils::HRTDS_BEGIN_ARRAY) {
+			std::vector<HRTDS_TOKEN> tokenizedArray = this->TokenizeArray(token);
+			tokens.insert(tokens.end(), tokenizedArray.begin(), tokenizedArray.end());
+		}
+		else if (token[0] == utils::HRTDS_BEGIN_TUPLE) {
+			std::vector<HRTDS_TOKEN> tokenizedTuple = this->TokenizeTuple(token);
+			tokens.insert(tokens.end(), tokenizedTuple.begin(), tokenizedTuple.end());
+		}
+		else {
+			HRTDS_TOKEN tupleElementToken = { HRTDS_TOKEN_TYPE::VALUE_TUPLE_ELEMENT, false, token };
+			tokens.push_back(tupleElementToken);
+		}
+
+		i = nextSeparator;
+	}
+
+	// Signifies the end of an array
+	tokens.push_back({ HRTDS_TOKEN_TYPE::VALUE_TUPLE_END, false, "" });
+
+	return tokens;
 }
 
 hrtds::HRTDS_IDENTIFIER_PAIR hrtds::HRTDS::RetrieveIdentifier(const std::string& identifierString) {
 	// First of all we check if its not a struct defining identifier
 	if (identifierString == "struct") {
 		return HRTDS_IDENTIFIER_PAIR { 
-			HRTDS_STANDARD_IDENTIFIER_TYPES::IDENTIFIER_STRUCT_DEFINITION,
+			HRTDS_IDENTIFIER_TYPE::IDENTIFIER_STRUCT_DEFINITION,
 			""
 		};
 	}
@@ -453,7 +783,7 @@ hrtds::HRTDS_IDENTIFIER_PAIR hrtds::HRTDS::RetrieveIdentifier(const std::string&
 
 	if (structNameIt != this->layoutByStructKeyMap.end()) {
 		return HRTDS_IDENTIFIER_PAIR{
-			HRTDS_STANDARD_IDENTIFIER_TYPES::IDENTIFIER_STRUCT,
+			HRTDS_IDENTIFIER_TYPE::IDENTIFIER_STRUCT,
 			structNameIt->first
 		};
 	}
@@ -464,7 +794,7 @@ hrtds::HRTDS_IDENTIFIER_PAIR hrtds::HRTDS::RetrieveIdentifier(const std::string&
 	
 	// Error-designator (IDENTIFIER_STRUCT with an emtpy StructureKey)
 	return HRTDS_IDENTIFIER_PAIR{
-		HRTDS_STANDARD_IDENTIFIER_TYPES::IDENTIFIER_STRUCT,
+		HRTDS_IDENTIFIER_TYPE::IDENTIFIER_STRUCT,
 		"" 
 	};
 }

@@ -12,24 +12,26 @@ namespace hrtds {
 	namespace utils {
 		const std::string HRTDS_BEGIN_HARD = "${";
 		const std::string HRTDS_END_HARD = "}$";
-		const char HRTDS_BEGIN_SOFT = '{';
-		const char HRTDS_END_SOFT = '}';
+		constexpr char HRTDS_BEGIN_SOFT = '{';
+		constexpr char HRTDS_END_SOFT = '}';
 
-		const char HRTDS_IDENTIFIER = '&';
-		const char HRTDS_ASSIGNMENT = ':';
-		const char HRTDS_BEGIN_ARRAY = '[';
-		const char HRTDS_END_ARRAY = ']';
-		const char HRTDS_TERMINATOR = ';';
-		const char HRTDS_QUOTE = '\"';
-		const char HRTDS_BEGIN_TUPLE = '(';
-		const char HRTDS_END_TUPLE = ')';
-		const char HRTDS_LIST_SEPARATOR = ',';
+		constexpr char HRTDS_IDENTIFIER = '&';
+		constexpr char HRTDS_ASSIGNMENT = ':';
+		constexpr char HRTDS_BEGIN_ARRAY = '[';
+		constexpr char HRTDS_END_ARRAY = ']';
+		constexpr char HRTDS_TERMINATOR = ';';
+		constexpr char HRTDS_QUOTE = '\"';
+		constexpr char HRTDS_BEGIN_TUPLE = '(';
+		constexpr char HRTDS_END_TUPLE = ')';
+		constexpr char HRTDS_LIST_SEPARATOR = ',';
 
-		const char HRTDS_WHITESPACE_SPACE = ' ';
-		const char HRTDS_WHITESPACE_NEWLINE = '\n';
+		constexpr char HRTDS_WHITESPACE_SPACE = ' ';
+		constexpr char HRTDS_WHITESPACE_NEWLINE = '\n';
 
 		// https://stackoverflow.com/questions/216823/how-to-trim-a-stdstring
 		void Trim(std::string& input);
+
+		size_t FindAtSameLevel(const std::string& input, char character, size_t from);
 	};
 
 	template <typename T>
@@ -180,7 +182,7 @@ namespace hrtds {
 		VALIDITY_INSERT
 	};
 
-	enum HRTDS_STANDARD_IDENTIFIER_TYPES {
+	enum HRTDS_IDENTIFIER_TYPE {
 		// References a structure of data types
 		IDENTIFIER_STRUCT,
 		IDENTIFIER_STRUCT_DEFINITION,
@@ -197,7 +199,7 @@ namespace hrtds {
 	typedef std::string
 		HRTDS_STANDARD_IDENTIFIER_NAME;
 
-	typedef std::unordered_map<HRTDS_STANDARD_IDENTIFIER_NAME, HRTDS_STANDARD_IDENTIFIER_TYPES>
+	typedef std::unordered_map<HRTDS_STANDARD_IDENTIFIER_NAME, HRTDS_IDENTIFIER_TYPE>
 		HRTDS_STANDARD_IDENTIFIER_BY_NAME_MAP;
 
 	// &struct& Version : { ...
@@ -206,7 +208,7 @@ namespace hrtds {
 		HRTDS_STRUCTURE_KEY;
 
 	typedef struct HRTDS_IDENTIFIER_PAIR {
-		HRTDS_STANDARD_IDENTIFIER_TYPES type;
+		HRTDS_IDENTIFIER_TYPE type;
 
 		// Only used when type == STRUCT
 		HRTDS_STRUCTURE_KEY structureKey;
@@ -227,25 +229,25 @@ namespace hrtds {
 
 
 	// these:-----------------------|
-	// |
-	// &struct& Version : { |
-	// &float& Date; <---|
-	// &int[]& Version; <---|
-	// &string& Download; <---|
+	//								|
+	// &struct& Version : {			|
+	//		&float& Date;		<---|
+	//		&int[]& Version;	<---|
+	//		&string& Download;	<---|
 	// };
 	typedef std::vector<HRTDS_LAYOUT_ELEMENT>
 		HRTDS_LAYOUT;
 
 	// Association associates "this" with "these"
 	//
-	// these:-----------------------|
-	// |
-	// this:------------| |
-	// \_______/ |
-	// &struct& Version : { |
-	// &float& Date; <---|
-	// &int& Version; <---|
-	// &string& Download; <---|
+	//	these:-----------------------|
+	//								 |
+	//	this:------------|			 |
+	//			\_______/			 |
+	//	&struct& Version : {		 |
+	//		&float& Date;		 <---|
+	//		&int& Version;		 <---|
+	//		&string& Download;	 <---|
 	// };
 	typedef std::unordered_map<HRTDS_STRUCTURE_KEY, HRTDS_LAYOUT>
 		HRTDS_LAYOUT_BY_STRUCT_KEY_MAP;
@@ -254,25 +256,25 @@ namespace hrtds {
 	// Used in code to represent this struct, with its data filled in:
 	//
 	// &struct& Version : {
-	// &float& Date;
-	// &int& Version;
-	// &string& Download;
+		// &float& Date;
+		// &int& Version;
+		// &string& Download;
 	// };
 	typedef std::unordered_map<HRTDS_STRUCTURE_KEY, HRTDS_VALUE>
 		HRTDS_STRUCTURE;
 
-	/* Functions used in HRTDS_VALUE::Parse_Value(...) */
+	/* Functions used in HRTDS_VALUE::ParseValue(...) */
 	static void SetBytes_String(std::string inputString, std::vector<std::byte>& bytes);
 	static void SetBytes_Bool(std::string inputString, std::vector<std::byte>& bytes);
 	static void SetBytes_Int(std::string inputString, std::vector<std::byte>& bytes);
 	static void SetBytes_Float(std::string inputString, std::vector<std::byte>& bytes);
 
 	typedef void(*SetBytesFunc)(std::string, std::vector<std::byte>&);
-	static std::unordered_map<HRTDS_STANDARD_IDENTIFIER_TYPES, SetBytesFunc> SetBytes{
-	{ IDENTIFIER_STRING, &SetBytes_String },
-	{ IDENTIFIER_BOOL, &SetBytes_Bool },
-	{ IDENTIFIER_INT, &SetBytes_Int },
-	{ IDENTIFIER_FLOAT, &SetBytes_Float }
+	static std::unordered_map<HRTDS_IDENTIFIER_TYPE, SetBytesFunc> SetBytes{
+		{ IDENTIFIER_STRING, &SetBytes_String },
+		{ IDENTIFIER_BOOL, &SetBytes_Bool },
+		{ IDENTIFIER_INT, &SetBytes_Int },
+		{ IDENTIFIER_FLOAT, &SetBytes_Float }
 	};
 
 	void hrtds::SetBytes_String(std::string inputString, std::vector<std::byte>& bytes)
@@ -331,9 +333,14 @@ namespace hrtds {
 		NAME,
 
 		VALUE_SINGLE,
-		VALUE_LIST_ELEMENT_START,
-		VALUE_LIST_ELEMENT,
-		VALUE_LIST_ELEMENT_END,
+
+		VALUE_TUPLE_BEGIN,
+		VALUE_TUPLE_END,
+		VALUE_TUPLE_ELEMENT,
+
+		VALUE_ARRAY_BEGIN,
+		VALUE_ARRAY_END,
+		VALUE_ARRAY_ELEMENT,
 
 		STRUCT_BEGIN,
 		STRUCT_FIELD_NAME,
@@ -355,7 +362,6 @@ namespace hrtds {
 		+ utils::HRTDS_IDENTIFIER
 		+ utils::HRTDS_ASSIGNMENT
 		+ utils::HRTDS_TERMINATOR
-		//+ utils::HRTDS_LIST_SEPARATOR
 	);
 
 	inline int EncodePair(char begin, char end) {
@@ -371,13 +377,6 @@ namespace hrtds {
 		// :...;
 		{ EncodePair(utils::HRTDS_ASSIGNMENT, utils::HRTDS_TERMINATOR), HRTDS_TOKEN_TYPE::VALUE_SINGLE	},
 
-		// :...,
-		{ EncodePair(utils::HRTDS_ASSIGNMENT,		utils::HRTDS_LIST_SEPARATOR ),	HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_START	},
-		// ,...,
-		{ EncodePair(utils::HRTDS_LIST_SEPARATOR,	utils::HRTDS_LIST_SEPARATOR	),	HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT		},
-		// ,...;
-		{ EncodePair(utils::HRTDS_LIST_SEPARATOR,	utils::HRTDS_TERMINATOR		),	HRTDS_TOKEN_TYPE::VALUE_LIST_ELEMENT_END	},
-
 		// :{&
 		{ EncodePair(utils::HRTDS_ASSIGNMENT, utils::HRTDS_IDENTIFIER),	HRTDS_TOKEN_TYPE::STRUCT_BEGIN		},
 		// &...;
@@ -389,129 +388,160 @@ namespace hrtds {
 	class HRTDS_VALUE {
 	public:
 		HRTDS_VALUE() = default;
+
+		// Single value
+		HRTDS_VALUE(std::string content, HRTDS_IDENTIFIER_TYPE valueType);
+
+		// As an array
 		HRTDS_VALUE(
-			std::vector<HRTDS_TOKEN>& tokens,
-			size_t& valueTokenStart, bool isArray, HRTDS_FIELD_NAME fieldName,
-			HRTDS_IDENTIFIER_PAIR identifierPair, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
-		) {
-			this->Set(tokens, valueTokenStart, isArray, fieldName, identifierPair, layoutByStructKeyMap);
-		}
+			std::vector<HRTDS_TOKEN>& tokens, size_t& cursor,
+			const HRTDS_IDENTIFIER_PAIR& arrayIdentifier,
+			const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
+		);
+
+		// As a structure
+		HRTDS_VALUE(
+			std::vector<HRTDS_TOKEN>& tokens, size_t& cursor,
+			const HRTDS_STRUCTURE_KEY& structureKey,
+			const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
+		);
+
+		// Determines for itself
+		HRTDS_VALUE(
+			std::vector<HRTDS_TOKEN>& tokens, size_t& cursor,
+			const HRTDS_IDENTIFIER_PAIR& identifierPair, bool isArray,
+			const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
+		);
 
 		~HRTDS_VALUE() = default;
 
-		HRTDS_STRUCTURE& operator[](size_t index) {
-			return this->structures[0];
-		}
+		HRTDS_VALUE& operator[](size_t index);
 
-		HRTDS_VALUE& operator[](std::string key) {
-			return this->structures[0][key];
-		}
-
-		void Set(
-			std::vector<HRTDS_TOKEN>& tokens, size_t& valueStart,
-			bool isArray, HRTDS_FIELD_NAME fieldName,
-			HRTDS_IDENTIFIER_PAIR identifierPair, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
-		);
+		HRTDS_VALUE& operator[](std::string key);
 
 		template <typename T>
-		T Get(size_t index) {
+		T Get() {
 			static_assert(std::is_trivially_copyable<T>::value, "T must be trivially copyable");
 
-			// Verify correct type
-			// ...
-
-			// Verify if array
-			// ...
-
-			// Return data
 			T value = T();
-			memcpy(&value, this->data[index].data(), this->data[index].size());
+			memcpy(&value, this->data.data(), this->data.size());
 
 			return value;
 		}
 
 		template <>
-		std::string Get<std::string>(size_t index) {
+		std::string Get<std::string>() {
 			std::string value = std::string();
-			value.resize(this->data[index].size());
-			memcpy(value.data(), this->data[index].data(), this->data[index].size());
+			value.resize(this->data.size());
+			memcpy(value.data(), this->data.data(), this->data.size());
 
 			return value;
 		}
 
-		template <typename T>
-		T Get() {
-			return this->Get<T>(0);
-		}
-
-		template <typename T>
-		std::vector<T> Get_Vector() {
-			static_assert(std::is_trivially_copyable<T>::value, "T must be trivially copyable");
-
-			// Verify correct type
-			// ...
-
-			// Verify if array
-			// ...
-
-			// Return data
-			std::vector<T> values;
-			values.resize(this->data.size());
-
-			for (size_t i = 0; i < this->data.size(); i++)
-			{
-				values[i] = this->Get<T>(i);
-			}
-
-			return values;
-		}
+		void Set(
+			std::vector<HRTDS_TOKEN>& tokens, size_t& cursor,
+			const HRTDS_IDENTIFIER_PAIR& identifierPair, bool isArray,
+			const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
+		);
 
 	private:
-		HRTDS_FIELD_NAME name;
-		HRTDS_IDENTIFIER_PAIR identifierPair;
+		//HRTDS_FIELD_NAME name;
+		//HRTDS_IDENTIFIER_PAIR identifierPair;
+		//bool isArray;
 
-		/* One of these are the value */
-		bool isArray;
+		/* One of these are populated (determined by the three values above) */
+		std::vector<std::byte> data;
+		std::vector<HRTDS_VALUE> array;
+		HRTDS_STRUCTURE structure;
 
-		// Filled if this->type != struct
-		std::vector<std::vector<std::byte>> data;
+		/* Functions to populate the data */
+		void ParseValue(std::string content, HRTDS_IDENTIFIER_TYPE valueType);
 
-		// [<value1>, <value2>, <value3>]
-		void Parse_Array(
-			std::vector<HRTDS_TOKEN>& tokens, size_t& valueTokenStart,
-			const HRTDS_IDENTIFIER_PAIR& identifierPair, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
+		void ParseArray(
+			std::vector<HRTDS_TOKEN>& tokens, size_t& cursor,
+			const HRTDS_IDENTIFIER_PAIR& arrayIdentifier,
+			const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
 		);
 
-		// <value>
-		void Parse_Value(std::string value, HRTDS_STANDARD_IDENTIFIER_TYPES valueType, size_t index);
-
-		// Empty if this->type != struct
-		std::vector<HRTDS_STRUCTURE> structures;
-
-		// (<value1>, <value2>, <value3>)
-		void Parse_Structure_Tuple(
-			std::vector<HRTDS_TOKEN>& tokens, size_t& valueTokenStart,
-			const HRTDS_STRUCTURE_KEY& structureKey, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap,
-			size_t index
+		void ParseTuple(
+			std::vector<HRTDS_TOKEN>& tokens, size_t& cursor, 
+			const HRTDS_STRUCTURE_KEY& structureKey, 
+			const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
 		);
 	};
+
+	//HRTDS_VALUE(
+//	std::vector<HRTDS_TOKEN>& tokens,
+//	size_t& valueTokenStart, bool isArray, HRTDS_FIELD_NAME fieldName,
+//	HRTDS_IDENTIFIER_PAIR identifierPair, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
+//) {
+//	this->Set(tokens, valueTokenStart, isArray, fieldName, identifierPair, layoutByStructKeyMap);
+//}
+
+	//void Set(
+//	std::vector<HRTDS_TOKEN>& tokens, size_t& valueStart,
+//	bool isArray, HRTDS_FIELD_NAME fieldName,
+//	HRTDS_IDENTIFIER_PAIR identifierPair, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
+//);
+
+	//template <typename T>
+//std::vector<T> Get_Vector() {
+//	static_assert(std::is_trivially_copyable<T>::value, "T must be trivially copyable");
+
+//	// Verify correct type
+//	// ...
+
+//	// Verify if array
+//	// ...
+
+//	// Return data
+//	std::vector<T> values;
+//	values.resize(this->data.size());
+
+//	for (size_t i = 0; i < this->data.size(); i++)
+//	{
+//		values[i] = this->Get<T>(i);
+//	}
+
+//	return values;
+//}
+
+
+	// [<value1>, <value2>, <value3>]
+	//void Parse_Array(
+	//	std::vector<HRTDS_TOKEN>& tokens, size_t& valueTokenStart,
+	//	const HRTDS_IDENTIFIER_PAIR& identifierPair, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
+	//);
+
+	// <value>
+	//void Parse_Value(std::string value, HRTDS_IDENTIFIER_TYPE valueType, size_t index);
+
+	// Empty if this->type != struct
+
+
+	// (<value1>, <value2>, <value3>)
+	//void Parse_Structure_Tuple(
+	//	std::vector<HRTDS_TOKEN>& tokens, size_t& valueTokenStart,
+	//	const HRTDS_STRUCTURE_KEY& structureKey, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap,
+	//	size_t index
+	//);
 
 	// The main class, this is the root of the file structure
 	//    
 	//    <root>
-	// HRTDS
-	//  |
-	//  |
+	//	  HRTDS
+	//		|
+	//		|
 	// "HRTDS_STRUCUTRE" (map linking name with value)
-	//  |
-	//  |   <name>   <value>
-	//  \-------["value1"]-----> HRTDS_VALUE
-	//  |
-	//  |   <name>   <value>
-	//  \-------["value2"]-----> HRTDS_VALUE
-	//  |
-	//  |   <name>   <value>
-	//  \-------["value3"]-----> HRTDS_VALUE
+	//		|
+	//		|		<name>			<value>
+	//		\-------["value1"]-----> HRTDS_VALUE
+	//		|
+	//		|		<name>			<value>
+	//		\-------["value2"]-----> HRTDS_VALUE
+	//		|
+	//		|		<name>			<value>
+	//		\-------["value3"]-----> HRTDS_VALUE
 	//    
 
 	class HRTDS
@@ -526,8 +556,9 @@ namespace hrtds {
 		void Parse(std::string content);
 
 	private:
-		std::vector<HRTDS_TOKEN> TokensizeArray(HRTDS_TOKEN arrayToken);
-		std::vector<HRTDS_TOKEN> TokenizeTuple(HRTDS_TOKEN tupleToken);
+		std::vector<HRTDS_TOKEN> TokenizeValue(HRTDS_TOKEN valueToken);
+		std::vector<HRTDS_TOKEN> TokenizeArray(std::string arrayString);
+		std::vector<HRTDS_TOKEN> TokenizeTuple(std::string tupleString);
 
 		HRTDS_IDENTIFIER_PAIR RetrieveIdentifier(const std::string& identifierString);
 
