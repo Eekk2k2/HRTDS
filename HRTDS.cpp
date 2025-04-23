@@ -324,6 +324,13 @@ void hrtds::HRTDS::Parse(std::string content)
 
 		// Replace the string in the original
 		content.replace(content.begin() + quoteBegin, content.begin() + quoteEnd, std::to_string(stringIndex));
+
+		// Now the final quote has moved back a bit : "Eekk2k2" to "0"......
+		//                                                    ^            ^
+		// So we move the cursor back to the end quote "0"......
+		//												 ^
+		// Position of first quote + characters in the number + the last quote
+		i = quoteBegin + std::to_string(stringIndex).size() + 1; 
 	}
 
 	// Remove all whitesapce (whitespace is only cared for inside strings
