@@ -445,10 +445,6 @@ namespace hrtds {
 		);
 
 	private:
-		//HRTDS_FIELD_NAME name;
-		//HRTDS_IDENTIFIER_PAIR identifierPair;
-		//bool isArray;
-
 		/* One of these are populated (determined by the three values above) */
 		std::vector<std::byte> data;
 		std::vector<HRTDS_VALUE> array;
@@ -469,62 +465,6 @@ namespace hrtds {
 			const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
 		);
 	};
-
-	//HRTDS_VALUE(
-//	std::vector<HRTDS_TOKEN>& tokens,
-//	size_t& valueTokenStart, bool isArray, HRTDS_FIELD_NAME fieldName,
-//	HRTDS_IDENTIFIER_PAIR identifierPair, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
-//) {
-//	this->Set(tokens, valueTokenStart, isArray, fieldName, identifierPair, layoutByStructKeyMap);
-//}
-
-	//void Set(
-//	std::vector<HRTDS_TOKEN>& tokens, size_t& valueStart,
-//	bool isArray, HRTDS_FIELD_NAME fieldName,
-//	HRTDS_IDENTIFIER_PAIR identifierPair, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
-//);
-
-	//template <typename T>
-//std::vector<T> Get_Vector() {
-//	static_assert(std::is_trivially_copyable<T>::value, "T must be trivially copyable");
-
-//	// Verify correct type
-//	// ...
-
-//	// Verify if array
-//	// ...
-
-//	// Return data
-//	std::vector<T> values;
-//	values.resize(this->data.size());
-
-//	for (size_t i = 0; i < this->data.size(); i++)
-//	{
-//		values[i] = this->Get<T>(i);
-//	}
-
-//	return values;
-//}
-
-
-	// [<value1>, <value2>, <value3>]
-	//void Parse_Array(
-	//	std::vector<HRTDS_TOKEN>& tokens, size_t& valueTokenStart,
-	//	const HRTDS_IDENTIFIER_PAIR& identifierPair, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap
-	//);
-
-	// <value>
-	//void Parse_Value(std::string value, HRTDS_IDENTIFIER_TYPE valueType, size_t index);
-
-	// Empty if this->type != struct
-
-
-	// (<value1>, <value2>, <value3>)
-	//void Parse_Structure_Tuple(
-	//	std::vector<HRTDS_TOKEN>& tokens, size_t& valueTokenStart,
-	//	const HRTDS_STRUCTURE_KEY& structureKey, const HRTDS_LAYOUT_BY_STRUCT_KEY_MAP& layoutByStructKeyMap,
-	//	size_t index
-	//);
 
 	// The main class, this is the root of the file structure
 	//    
