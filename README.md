@@ -52,27 +52,27 @@ A lightweight C++ static library for parsing and mapping hierarchical, strongly-
     #include "HRTDS.h"
     
     int main() {
-			// ...
-			
-			std::string content; // Populated from a file or network traffic
+		// ...
+		
+		std::string content; // Populated from a file or network traffic
 
-			hrtds::HRTDS hrtdsFile(content);
+		hrtds::HRTDS hrtdsFile(content);
 
-			// Access values
-			int age = hrtdsFile["age"].Get<int>();
-			float temp = hrtdsFile["temperature"].Get<float>();
-			bool developer = hrtdsFile["developer"].Get<bool>();
-			std::string description = hrtdsFile["description"].Get<std::string>();
+		// Access values
+		int age = hrtdsFile["age"].Get<int>();
+		float temp = hrtdsFile["temperature"].Get<float>();
+		bool developer = hrtdsFile["developer"].Get<bool>();
+		std::string description = hrtdsFile["description"].Get<std::string>();
 
-			// Retrieve value from array (and a struct)
-			int currentVersionIndex = hrtdsFile["currentVersionIndex"].Get<int>();
+		// Retrieve value from array (and a struct)
+		int currentVersionIndex = hrtdsFile["currentVersionIndex"].Get<int>();
 
-			hrtds::HRTDS_VALUE& currentVersionStruct = hrtdsFile["versions"][currentVersionIndex];
-			int currentVersionReleaseDate = currentVersionStruct["releaseDate"].Get<int>();
-			std::string currentVersionAuthor = currentVersionStruct["author"].Get<std::string>();
-			
-			// Use the data
-			// ...
+		hrtds::HRTDS_VALUE& currentVersionStruct = hrtdsFile["versions"][currentVersionIndex];
+		int currentVersionReleaseDate = currentVersionStruct["releaseDate"].Get<int>();
+		std::string currentVersionAuthor = currentVersionStruct["author"].Get<std::string>();
+		
+		// Use the data
+		// ...
     }
     
     ```
@@ -102,14 +102,14 @@ A lightweight C++ static library for parsing and mapping hierarchical, strongly-
 
 ### Terminology
 
-|Name| Description |
-|--|--|
-| Field | Any set of a `value`, `field name` and `identifier` components |
-| Field name | The name of a given field, used for addressing different fields within a `structure` |
-| Structure | A data schema with a defined layout of `identifiers` |
-| Half-field | Just like a `field` but without the `value`. Used in structures to define the layout. |
-| Identifier | Identifies which type of field we are working with |
-| Type | A data type, such as an `int`, `float`, `string` or `bool` |
+|Name			| Description 																				|
+|---------------|-------------------------------------------------------------------------------------------|
+| Field 		| Any set of a `value`, `field name` and `identifier` components 							|
+| Field name 	| The name of a given field, used for addressing different fields within a `structure` 		|
+| Structure 	| A data schema with a defined layout of `identifiers` 										|
+| Half-field 	| Just like a `field` but without the `value`. Used in structures to define the layout. 	|
+| Identifier 	| Identifies which type of field we are working with 										|
+| Type 			| A data type, such as an `int`, `float`, `string` or `bool` 								|
 
 ### Syntax
 
@@ -125,15 +125,16 @@ ${
 	...
 }$
 ```
-\
+
 \
 **2. Creating a basic field**
 A field consists of three main parts. It needs an identifier in the front, a name in the middle, and at the end a value. 
-|Field Component|Syntax|Definition|
-|---------------|------|----------|
-|Identifier|`&<identifier>&`|Wrap a string with the `utils::HRTDS_IDENTIFIER` (which is the `&`)
-|Identifier|`...& <name>`| The name always comes after the identifier and before the value.
-|Value|`: <value>;`| Wrap the value with a leading `utils::HRTDS_ASSIGNMENT` (`:`, or the 'colon') and a trailing `utils::HRTDS_TERMINATOR` (`;`, or a 'semi colon'). To find more about values head to *# 3. Delving into values*.
+| Component			| Syntax			| Definition																	|
+|-------------------|-------------------|-------------------------------------------------------------------------------|
+| Identifier		| `&<identifier>&`	| Wrap a string with the `utils::HRTDS_IDENTIFIER` (which is the `&`) 			|
+| Name				| `...& <name>`		| The name always comes after the identifier and before the value. 				|
+| Value				| `: <value>;`		| Wrap the value with a leading `utils::HRTDS_ASSIGNMENT` (`:`, or the 'colon') and a trailing `utils::HRTDS_TERMINATOR` (`;`, or a 'semi colon'). To find more about values head to *# 3. Delving into values*. |
+
 **Example field:** `&string& Author : "Eekk2k2";` 
 \
 *example.hrtds*:
@@ -146,16 +147,18 @@ ${
 	&string& description : "This is a description.";
 }$
 ```
-\
+
 \
 **3. Delving into values**
 The library includes a few built-in value identifiers, called "types". These are any identifier linked directly with a data-type.
-|Value Type| Syntax | Definition |
-|--|--|--|
-|`&int&`|`25`|Non-decimal number, the value must fit all requirements for `std::stoi`|
-|`&float&`|`25`, `25.0` or `.5`|Any number, the value must fit all requirements for `std::stof`|
-|`&bool&`|`true` or `1`|If the value is equal to `true` or `1` then its evaluated to `true`, if not; `false`|
-|`&string&`|`"Hello World"`|Any value wrapped in `utils::HRTDS_QUOTE` (`"`, quotation mark), including semantic|
+
+| Value Type	| Syntax 				| Definition 																			|
+|---------------|---------------------- |---------------------------------------------------------------------------------------|
+| `&int&`		| `25`					| Non-decimal number, the value must fit all requirements for `std::stoi`				|
+| `&float&`		| `25`, `25.0` or `.5`	| Any number, the value must fit all requirements for `std::stof`						|
+| `&bool&`		| `true` or `1`			| If the value is equal to `true` or `1` then its evaluated to `true`, if not; `false`	|
+| `&string&`	| `"Hello World"`		| Any value wrapped in `utils::HRTDS_QUOTE` (`"`, quotation mark), including semantic	|
+
 You can also define your own data schemas. To do so, create a field using the `struct` identifier, and leave the value with a `utils::HRTDS_BEGIN_SOFT` (`{`, opening brace) and a `utils::HRTDS_END_SOFT` (`}`, closing brace). The syntax for this follows a C-like structure:
 ```
 &struct& <name> : {
@@ -181,7 +184,7 @@ In order to use this structure in a field you first set the identifier to the na
 
 &Version& version : (3, false, 17534, "Eekk2k2");
 ```
-The final thing remaining are arrays. These are 1:1 syntactically similar to any C-like language's array, with the values separated by a `utils::HRTDS_SEPARATOR` (`,` or better known: the comma), and then wrapped with a leading `utils::HRTDS_BEGIN_ARRAY` (`[`, opening square bracket) and a trailing `utils::HRTDS_END_ARRAY` (`]`, closing square bracket). 
+The final thing remaining are arrays. These are 1:1 syntactically similar to any C-like language's array, with the values separated by a `utils::HRTDS_SEPARATOR` (`,` or better known: the comma), and then wrapped with a leading `utils::HRTDS_BEGIN_ARRAY` (`[`, opening square bracket) and a trailing `utils::HRTDS_END_ARRAY` (`]`, closing square bracket).
 ```
 &int[]& integers : [1, 2, 3, 4, 5];
 ```
@@ -211,6 +214,7 @@ ${
 	];
 }$
 ```
+
 ## API Reference
 
 ### `hrtds::HRTDS`
