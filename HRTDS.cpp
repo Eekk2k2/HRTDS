@@ -129,10 +129,7 @@ void hrtds::HRTDS_VALUE::ParseArray(std::vector<HRTDS_TOKEN>& tokens, size_t& cu
 	cursor++;
 
 	// Now march through the tokens array until VALUE_ARRAY_END is found
-	std::vector<std::vector<std::byte>> data;
-
 	size_t arrayTokenEnd = 0;
-	bool isOfStructures = arrayIdentifier.type == HRTDS_IDENTIFIER_TYPE::IDENTIFIER_STRUCT;
 	for (size_t i = cursor; i < tokens.size(); i++)
 	{
 		HRTDS_TOKEN_TYPE currentType = tokens[i].tokenType;
@@ -220,7 +217,7 @@ void hrtds::HRTDS_VALUE::ParseTuple(std::vector<HRTDS_TOKEN>& tokens, size_t& cu
 			break;
 		}
 
-		// Check if its a nested tuple
+		// Check if its a nested array
 		else if (currentType == HRTDS_TOKEN_TYPE::VALUE_ARRAY_BEGIN) {
 			HRTDS_VALUE structure = HRTDS_VALUE(tokens, i, layout[j].identifierPair, layoutByStructKeyMap);
 			this->structure[layout[j].fieldName] = structure;
@@ -228,7 +225,7 @@ void hrtds::HRTDS_VALUE::ParseTuple(std::vector<HRTDS_TOKEN>& tokens, size_t& cu
 			j++;
 		}
 
-		// or if its a nested array
+		// or if its a nested tuple
 		else if (currentType == HRTDS_TOKEN_TYPE::VALUE_TUPLE_BEGIN) {
 			HRTDS_VALUE array = HRTDS_VALUE(tokens, i, layout[j].identifierPair.structureKey, layoutByStructKeyMap);
 			this->structure[layout[j].fieldName] = array;
@@ -334,7 +331,7 @@ void hrtds::HRTDS::Parse(std::string content)
 	}
 
 	// Remove all whitesapce (whitespace is only cared for inside strings
-	content.erase(std::remove_if(content.begin(), content.end(), std::isspace), content.end());
+	content.erase(std::remove_if(content.begin(), content.end(), [](char c) { return std::isspace(static_cast<unsigned char>(c)); }), content.end());
 
 	// Tokenize file (first pass)
 	std::vector<HRTDS_TOKEN> tokens;
@@ -452,7 +449,7 @@ void hrtds::HRTDS::Parse(std::string content)
 			continue;
 		}
 
-		this->structure[nameToken.content] = HRTDS_VALUE(tokens, i, identifierPair, layoutByStructKeyMap);
+		this->structure[nameToken.content] = HRTDS_VALUE(tokens, i, identifierPair, identifierToken.isArray, layoutByStructKeyMap);
 
 		// 'i' is modified by the functions above, and is now pointing to the last value token
 		// the for-loop will increment i with one and we will be ready to do this all over again
