@@ -1,17 +1,18 @@
 
-# HRTDS C++ Library
 
-A lightweight C++ static library for parsing and mapping hierarchical, strongly-typed data using a custom Human-Readable Typed Data Serialization (HRTDS) format.
+# HRTDS C++20 Library
+
+A modern and lightweight C++ static library for parsing and mapping hierarchical, strongly-typed data using a custom format named Human-Readable Typed Data Serialization (HRTDS).
 
 ## Key Features
 
--   **Custom Data Layout**: Define schemas (`struct` blocks) and data fields with typed identifiers like `string`, `bool`, `int`, `float`, nested structures, and arrays.
+-   **Custom Data Layout**: Define schemas (`struct` blocks) and data fields with typed identifiers like `string`, `bool`, `intN`, `float`, nested structures, and arrays.
+
+- **Extensible Type System (Coming soon)**:  Add parsing support for any C++ type by specializing `StaticConverter<T>`.
     
--   **Memory-mapped struct files**: `StructFile<T>` wraps Windows file mapping APIs to map a C++ struct directly into a file for fast storage and retrieval.
+-   **Zero-dependency**: Uses only the C++ standard library — no external dependencies.
     
--   **Zero-dependency**: Uses only the C++ standard library and Windows API — no external dependencies.
-    
--   **Strong typing**: Access parsed values with templated getters (`Get<T>(...)`, `Get_Vector<T>()`).
+-   **Strong typing**: Access parsed values with templated getters (`Get<T>(...)`).
     
 
 ## Installation
@@ -21,23 +22,23 @@ A lightweight C++ static library for parsing and mapping hierarchical, strongly-
 
 ## Usage
 
-1.  **Define a schema and data** in an `.hrtds` file (syntax is provided further down):
+1.  **Define structure layouts and value fields** in an `.hrtds` file (example is provided further down):
     
     ```text
 	${															
 		&struct& Version : {									
-			&int& versionNumber;								
-			&bool& betaRelease;									
-			&int& releaseDate;									
-			&string& author;									
+			&int64& versionNumber,								
+			&bool& betaRelease,									
+			&int64& releaseDate,									
+			&string& author,									
 		};														
 																
-		&int& age : 32;											
-		&float& temperature : 16.5f;							
+		&int8& age : 32;											
+		&float& temperature : 16.5;							
 		&bool& developer : true;								
 		&string& description : \"This is a description.\";		
 																
-		&int& currentVersionIndex : 2;							
+		&int16& currentVersionIndex : 2;							
 		&Version[]& versions : [								
 			(1, true, 	17534, \"Eekk2k2\"),					
 			(2, false, 	17512, \"Eekk2k2\"),					
@@ -56,10 +57,11 @@ A lightweight C++ static library for parsing and mapping hierarchical, strongly-
 		
 		std::string content; // Populated from a file or network traffic
 
-		hrtds::HRTDS hrtdsFile(content);
+		hrtds::HRTDS hrtdsFile = hrtds::Hrtds();
+		hrtds::HRTDS::Parse(hrtdsFile, content);
 
 		// Access values
-		int age = hrtdsFile["age"].Get<int>();
+		int8_t age = hrtdsFile["age"].Get<int8_t>();
 		float temp = hrtdsFile["temperature"].Get<float>();
 		bool developer = hrtdsFile["developer"].Get<bool>();
 		std::string description = hrtdsFile["description"].Get<std::string>();
@@ -76,64 +78,39 @@ A lightweight C++ static library for parsing and mapping hierarchical, strongly-
     }
     
     ```
-    
-3.  **Additionally: Memory-map a struct**:
-    
-    ```cpp
-    // Define a struct containing only trivially copyable fields
-    struct MyData { int x; float y; char name[32]; };
-    
-    // Then create a new StructFile<T> with a filename
-    hrtds::StructFile<MyData> mappedFile("data.bin");
-    
-    // Writing is the same as modifying the struct
-    mappedFile.data->x = 42;
-    mappedFile.data->y = 38;
-    
-    mappedFile.Flush(); // Ensures data is written
-    
-    // Same with reading
-    char[32] name;
-    memcpy(&name, mappedFile.data->name, 32);
-    
-    ```
+
+
+
 
 ## Docs
 
-### Terminology
-
-|Name			| Description 																				|
-|---------------|-------------------------------------------------------------------------------------------|
-| Field 		| Any set of a `value`, `field name` and `identifier` components 							|
-| Field name 	| The name of a given field, used for addressing different fields within a `structure` 		|
-| Structure 	| A data schema with a defined layout of `identifiers` 										|
-| Half-field 	| Just like a `field` but without the `value`. Used in structures to define the layout. 	|
-| Identifier 	| Identifies which type of field we are working with 										|
-| Type 			| A data type, such as an `int`, `float`, `string` or `bool` 								|
-
 ### Syntax
 
-**1. Defining the boundaries**
-Start off by defining the the region of a file which will be parsed. This is done through the `hrtds::utils::HRTDS_BEGIN_HARD` and `hrtds::utils::HRTDS_END_HARD` substrings. 
+**1. Setting boundaries**
+Begin by defining the the file scope to indicate which region will be parsed. This is done through the `hrtds::config::Glyph::BEGIN_FILE_SCOPE` and `hrtds::config::Glyph::BEGIN_FILE_SCOPE` glyph literals. 
 
-> In the standard implementation these look like `${` and `}$`, respectively, but can through a custom one be whatever. (This also applies to any other substring)
+> In the standard implementation these look like `${` and `}$`, respectively. However  in a custom one be whatever. (This also applies to any other glyph used in parsing, such as `&`, `;`, `[`, etc)
 
 \
 *example.hrtds*:
 ```text
+You can write comments before...
+
 ${
 	...
 }$
+
+... and after the file scope - they just won't persist through any parsing.
 ```
 
 \
 **2. Creating a basic field**
-A field consists of three main parts. It needs an identifier in the front, a name in the middle, and at the end a value. 
-| Component			| Syntax			| Definition																	|
+A field consists of three main parts. It needs an identifier at the front, a name in the middle, and a value at the end. 
+| Token			| Syntax			| Definition																	|
 |-------------------|-------------------|-------------------------------------------------------------------------------|
-| Identifier		| `&<identifier>&`	| Wrap a string with the `utils::HRTDS_IDENTIFIER` (which is the `&`) 			|
-| Name				| `...& <name>`		| The name always comes after the identifier and before the value. 				|
-| Value				| `: <value>;`		| Wrap the value with a leading `utils::HRTDS_ASSIGNMENT` (`:`, or the 'colon') and a trailing `utils::HRTDS_TERMINATOR` (`;`, or a 'semi colon'). To find more about values head to *# 3. Delving into values*. |
+| Identifier		| `&<identifier>&..`	| Wrap a string with the `Glyph::IDENTIFIER` (which is the `&`) 			|
+| Name				| `..& <name> :.. `		| The name always comes after the identifier and before the value. 				|
+| Value				| `..: <value>;`		| Wrap the value with a leading `Glyph::ASSIGNMENT` (a  'colon', `:`) and a trailing `Glyph::TERMINATOR` (a 'semi colon', `;`). To find more about values head to *# 3. Delving into values*. |
 
 **Example field:** `&string& Author : "Eekk2k2";` 
 \
@@ -141,76 +118,82 @@ A field consists of three main parts. It needs an identifier in the front, a nam
 
 ```text
 ${
-	&int& age : 32;
-	&float& temperature : 16.5f;
+	&int8& age : 32;
+	&float& temperature : 16.5;
 	&bool& developer : true;
 	&string& description : "This is a description.";
 }$
 ```
 
 \
-**3. Delving into values**
-The library includes a few built-in value identifiers, called "types". These are any identifier linked directly with a data-type.
+**3. Delving Into values**
+The library includes a few built-in value identifiers, called "types".  In the future, you will be able to add support for your own types.
 
 | Value Type	| Syntax 				| Definition 																			|
 |---------------|---------------------- |---------------------------------------------------------------------------------------|
-| `&int&`		| `25`					| Non-decimal number, the value must fit all requirements for `std::stoi`				|
+| `&(u)intN&`		| `25`					| Non-decimal number, the value must fit all requirements for `std::stoi`/`std::stol`/`std::stoll`/`std::stoul`/`std::stoull` (depending on which integer)				|
 | `&float&`		| `25`, `25.0` or `.5`	| Any number, the value must fit all requirements for `std::stof`						|
-| `&bool&`		| `true` or `1`			| If the value is equal to `true` or `1` then its evaluated to `true`, if not; `false`	|
-| `&string&`	| `"Hello World"`		| Any value wrapped in `utils::HRTDS_QUOTE` (`"`, quotation mark), including semantic	|
+| `&double&`		| `25`, `25.0` or `.5`	| Any number, the value must fit all requirements for `std::stod`. Has higher precision than float.						|
+| `&bool&`		| `true` or `1`			| If the value is equal to `true` or `1` then its evaluated to `true`, if not, `false`. It is still recommended to write `false` for a falsy value.	|
+| `&string&`	| `"Hello World"`		| Any value wrapped in `Glyph::QUOTE` (`"`, quotation mark)	|
 
-You can also define your own data schemas. To do so, create a field using the `struct` identifier, and leave the value with a `utils::HRTDS_BEGIN_SOFT` (`{`, opening brace) and a `utils::HRTDS_END_SOFT` (`}`, closing brace). The syntax for this follows a C-like structure:
+You can also define your own data layouts. To do so, create a field using the `struct` identifier, and leave the value with a `Glyph::BEGIN_SCOPE` (`{`, opening brace) and a `Glyph::END_SCOPE` (`}`, closing brace). The syntax for this follows a C-like structure:
 ```
-&struct& <name> : {
+&struct& myStruct : {
 	
 };
 ```
-To define the layout, populate the braces with half-fields. Half-fields are generally similar to regular fields, just lacks the `: value` component. An example of this would look something like: `&int& Age;`. Populated, the struct should look like this:
+To define the layout, populate the braces with declaring fields. Which are fields without the value component and which are separated by a `Glyph::LIST_SEPARATOR` (a 'comma', `,`), rather than a `Glyph::TERMINATOR`. An example of this would be:
 ```
-&struct& <name> : {
-	&<identifier>& <name1>;
-	&<identifier>& <name2>;
-	&<identifier>& <name3>;
+&struct& myStruct : {
+	&type& <name1>,
+	&type& <name2>,
+	&type& <name3>
 };
 ```
-In order to use this structure in a field you first set the identifier to the name of the structure, then you modify the value to be a tuple, where each of the values in the tuple is chronologically aligned with the schema:   
- ```
-&struct& Version : {
-	&int& versionNumber;
-	&bool& betaRelease;
-	&int& releaseDate;
-	&string& author;
+In order to use this structure in a value you first set the identifier to the name of the structure:
+```
+&struct& Asset : {
+     &int8& type,
+     &string& author,
+     &int16[]& version,
+     &string& path
 };
 
-&Version& version : (3, false, 17534, "Eekk2k2");
+&Asset& myAsset : ... ;
 ```
-The final thing remaining are arrays. These are 1:1 syntactically similar to any C-like language's array, with the values separated by a `utils::HRTDS_SEPARATOR` (`,` or better known: the comma), and then wrapped with a leading `utils::HRTDS_BEGIN_ARRAY` (`[`, opening square bracket) and a trailing `utils::HRTDS_END_ARRAY` (`]`, closing square bracket).
+Then you populate the value with a tuple, where each of the values in the tuple is aligned chronologically with its field in the schema:   
 ```
-&int[]& integers : [1, 2, 3, 4, 5];
+&struct& Asset : {
+     &int8& type,
+     &string& author,
+     &int16[]& version,
+     &string& path
+};
+
+&Asset& myAsset : (2, "Eekk2k2", [1, 0, 0], ".\Assets\myAsset.asset") ;
 ```
-> Also remember to append a set of both BEG_ARR and END_ARR (`[]`) at the end of an identifier (`&...[]&`. This is to inform the parser about a coming array.
+As you can see in the example above, I am using arrays. These are syntactically similar to any C-like language's array, with the values separated by a `Glyph::LIST_SEPARATOR` (`,` or better known as the comma), and then wrapped with a leading `Glyph::BEGIN_ARRAY` (`[`, opening square bracket) and a trailing `Glyph::END_ARRAY` (`]`, closing square bracket).
+```
+&uint8[]& integers : [1, 2, 3, 4, 5];
+```
+> Also remember to append a set of both BEGIN_ARRAY and END_ARRAY (`[]`) at the end of any identifier (`&...[]&`. This is to inform the parser about a coming array.
 
 \
 *example.hrtds*:
 ```text
 ${
-	&struct& Version : {
-		&int& versionNumber;
-		&bool& betaRelease;
-		&int& releaseDate;
-		&string& author;
+	&struct& Asset : {
+	    &int8& type,
+	    &string& author,
+	    &int16[]& version,
+	    &string& path
 	};
 
-	&int& age : 32;
-	&float& temperature : 16.5f;
-	&bool& developer : true;
-	&string& description : "This is a description.";
-	
-	&int& currentVersionIndex : 2;
-	&Version[]& versions : [
-		(1, true, 	17534, "Eekk2k2"),
-		(2, false, 	17512, "Eekk2k2"),
-		(3, false, 	34509, "Eekk2k2"),				
+	&Asset[]& assets : [
+		(1, "Eekk2k2", 	[1, 0, 1], "<path>"),
+		(2, "Eekk2k2", 	[1, 0, 1], "<path>"),
+		(2, "Eekk2k2", 	[1, 0, 1], "<path>")				
 	];
 }$
 ```
@@ -219,35 +202,27 @@ ${
 
 ### `hrtds::HRTDS`
 
--   `HRTDS(const std::string &content)`: Construct and parse HRTDS content string.
-    
--   `void Parse(const std::string &content)`: Parse or re-parse content.
+-   `static void Parse(HRTDS& hrtds, std::string content)`: Populates a HRTDS object from a parsed content string.
+- `static std::string Compose(const HRTDS& hrtds)`: Composes a HRTDS object into a content string.
     
 -   `HRTDS_VALUE& operator[](const std::string &key)`: Access a field by name.
     
 
-### `HRTDS_VALUE`
+### `hrtds::Value`
 
--   `template<typename T> T Get(size_t index = 0)`: Retrieve a typed value.
-    
--   `template<typename T> std::vector<T> Get_Vector()`: Retrieve an array of typed values.
-    
--   `HRTDS_VALUE& operator[](size_t index)`: Index into array of structures.
-    
--   `HRTDS_VALUE& operator[](const std::string &subKey)`: Access nested struct field.
-    
+-   `template<typename T> T Get()`: Retrieves the stored bytes of Value to type T. Currently no type verification.
 
-### `hrtds::StructFile<T>`
+ - `const std::vector<std::byte>& Get()`: Retrieves the stored bytes of Value. 
 
--   `StructFile(const std::string &path)`: Open or create a memory-mapped file of size `sizeof(T)`.
+- `template<typename T> T Set(T data)`: Sets the bytes of Value from data of type T. No type verification.  
     
--   `void Flush()`: Flush changes to disk.
-    
--   `~StructFile()`: Unmaps and closes file handles.
-    
-## Future Features
+- `Set(std::vector<std::byte> data)`: Sets the bytes of Value from data.
 
-1. Right now the library only supports deserialzing the data from a content string, in the future you will also be able to serialize the data.
+    
+-   `Value& operator[](size_t index)`: Return child value of value array. Use `Value::Get()` to retrieve data.
+    
+-   `Value& operator[](const std::string &name)`: Access field of structure layout.
+   
 
 ## Contributing
 
