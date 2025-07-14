@@ -131,7 +131,7 @@ The library includes a few built-in value identifiers, called "types".  In the f
 
 | Value Type	| Syntax 				| Definition 																			|
 |---------------|---------------------- |---------------------------------------------------------------------------------------|
-| `&(u)intN&`		| `25`					| Non-decimal number, the value must fit all requirements for `std::stoi`/`std::stol`/`std::stoll`/`std::stoul`/`std::stoull` (depending on which integer)				|
+| `&(u)intN&`		| `25`					| Non-decimal number, the value must fit all requirements for `std::stoi`/`std::stol`/`std::stoll`/`std::stoul`/`std::stoull` (depending on integer bit count)				|
 | `&float&`		| `25`, `25.0` or `.5`	| Any number, the value must fit all requirements for `std::stof`						|
 | `&double&`		| `25`, `25.0` or `.5`	| Any number, the value must fit all requirements for `std::stod`. Has higher precision than float.						|
 | `&bool&`		| `true` or `1`			| If the value is equal to `true` or `1` then its evaluated to `true`, if not, `false`. It is still recommended to write `false` for a falsy value.	|
@@ -206,7 +206,8 @@ ${
 - `static std::string Compose(const HRTDS& hrtds)`: Composes a HRTDS object into a content string.
     
 -   `HRTDS_VALUE& operator[](const std::string &key)`: Access a field by name.
-    
+
+> The `HRTDS` class has other member functions, but these are not meant for the end user to interact with. Functions such as - but not limited to - `DefineField(...)`, `DeclareStructure(...)`, `RetrieveStructureDeclaration(...)` are primarily there for the parser. Although I won't come after you if you do choose to use them. 
 
 ### `hrtds::Value`
 
@@ -223,11 +224,11 @@ ${
     
 -   `Value& operator[](const std::string &name)`: Access field of structure layout.
    
+   > Similar to how the `HRTDS` class works, the `Value` class has other member functions than the ones shown above, but these are also not meant for the end user to interact with. Functions such as - but not limited to - `SetIdentifier(...)`, and `SetLayout(...)`  are primarily there for the parser. Although I won't come after you if you do choose to use them. 
 
-## Contributing
+## Language Support
 
-1.  This library is private and intended for personal use only. Contributions, forks, or modifications are not permitted. All rights reserved. Usage is only allowed with explicit permission from the owner.
-    
+This library was developed and tested using **C++20** with **MSVC 2022 (x64)** on **Windows 11**. However, since it has no platform-specific dependencies, it should compile and run on any platform that supports modern C++ (C++20 or later).
 
 ## License
 
