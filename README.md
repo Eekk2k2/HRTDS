@@ -274,16 +274,16 @@ static inline std::unordered_map<std::string, DestroyFunction> Destroy{};
 
 In the same file where your type lies, either include `hrtds.h` or `hrtds_data.h` (the latter doesn't come included with your `includes/` folder, but you can find it in `build/src/data/`).
 ```cpp
-#include <hrtds_data,h> // lighter include than hrtds.h
+#include <hrtds_data.h> // lighter include than hrtds.h
 
 class MyType {
 	...
 };
 ```
 
-Then specialize the `hrtds::data::StaticConverter<T>` struct with your type. There are two ways to achieve this, depending on the level of control you wish. The simplest way is to utilize the `HRTDS_DATA_STATIC_CONVERTER(Type, alias)` macro. All you need to do is to plug in your type's name and your requested alias (what it will be named in-file). 
+Then specialize the `hrtds::data::StaticConverter<T>` struct with your type. There are two ways to achieve this, depending on the level of control you wish. The simplest way is to utilize the `HRTDS_DATA_STATIC_CONVERTER(Type, alias)` macro, which specializes the struct with all its functions for you. All you need to do is to plug in your type's name and your requested alias (what it will be named in-file). 
 ```cpp
-#include <hrtds_data,h>
+#include <hrtds_data.h>
 
 class MyType {
 	...
@@ -293,8 +293,59 @@ HRTDS_DATA_STATIC_CONVERTER(MyType, "mytype");
 ```
 > Note that the alias will override any existing override, but this behavior is unpredictable so use an original alias.
 
+If you want to add something to the specialized struct, such as a helper function, or maybe another variable, you have to create the template specialization yourself. In your header file, copy and paste the code below to the same place you would copy paste the macro.
+```cpp
+template<>
+struct hrtds::data::StaticConverter<YOUR_TYPE> {
+	static void* FromString(const std::string&);
+	static std::string ToString(const void*);
+	static void Destroy(void*);
+private:
+	static inline bool _reg = []{
+		DyamicConverter::Register(
+			"YOUR_ALIAS",
+			&StaticConverter<YOUR_TYPE>::FromString,
+			&StaticConverter<YOUR_TYPE>::ToString,
+			&StaticConverter<YOUR_TYPE>::Destroy
+		);
+
+		return true;
+	}();
+};
+```
+>The `static inline bool _reg` followed by a lambda is what actually registers the functions in the `DynamicConverter`
+
+Now all you have to do is replace every `YOUR_TYPE` with your actual type and every `YOUR_ALIAS` with your alias. You should also be able to customize the specialization however you may please, just make sure the signature of the three main functions stay the same. It should now look something like this:
+```cpp
+#include <hrtds_data.h>
+
+class MyType {
+	...
+};
+
+template<>
+struct hrtds::data::StaticConverter<MyType> {
+	static void* FromString(const std::string&);
+	static std::string ToString(const void*);
+	static void Destroy(void*);
+private:
+	static inline bool _reg = []{
+		DyamicConverter::Register(
+			"mytype",
+			&StaticConverter<MyType>::FromString,
+			&StaticConverter<MyType>::ToString,
+			&StaticConverter<MyType>::Destroy
+		);
+
+		return true;
+	}();
+};
+```
+> If you are using visual studio: A little tip for verifying if your type is being registered is opening the watch window and inputting `hrtds::data::DynamicConverter::FromString`, `hrtds::data::DynamicConverter::ToString`, and `hrtds::data::DynamicConverter::Destroy`.
+
 \
 **Adding Support - The Source File**
+...
 ### API Reference 
 ### `hrtds::HRTDS`
 
