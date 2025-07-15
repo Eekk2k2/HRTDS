@@ -32,7 +32,7 @@ ${
 		&int32_[]& position,
 		&int32_[]& size,
 		&string& title,
-		&Element[] elements
+		&Element[]& elements
 	};
 	
 	&Window[]& windows : [
