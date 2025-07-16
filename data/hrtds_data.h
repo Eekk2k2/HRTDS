@@ -10,52 +10,99 @@ namespace hrtds {
 
 		template<typename T>
 		struct StaticConverter {
-			static inline std::vector<std::byte> FromString(const std::string& input) {
-				static_assert(dependent_false<T>::value, "Converter<T>::FromString(const std::string&) is not implemented for this type T.");
+			static inline void* FromString(const std::string& input) {
+				static_assert(dependent_false<T>::value, "Converter<T>::FromString(const std::string&) is not implemented for type T.");
 			}
 
-			static inline std::string ToString(const std::vector<std::byte>& input) {
-				static_assert(dependent_false<T>::value, "Converter<T>::ToString(const std::vector<std::byte>&) is not implemented for this type T.");
+			static inline std::string ToString(const void* data) {
+				static_assert(dependent_false<T>::value, "Converter<T>::ToString(const std::string&) is not implemented for type T.");
 			}
 
-			static inline std::vector<std::byte> FromType(const T& input) {
-				static_assert(dependent_false<T>::value, "Converter<T>::ToBytes(const T&) is not implemented for this type T.");
-			}
-
-			static inline T ToType(const std::vector<std::byte>& input) {
-				static_assert(dependent_false<T>::value, "Converter<T>::ToType(const std::vector<std::byte>&) is not implemented for this type T.");
+			static inline void Destroy(void* data) {
+				static_assert(dependent_false<T>::value, "Converter<T>::Destroy(void*) is not implemented for type T.");
 			}
 		private:
 			static inline bool _reg;
 		};
 
+
 #define HRTDS_DATA_STATIC_CONVERTER(Type, alias)						\
     template<>															\
     struct hrtds::data::StaticConverter<Type> {							\
-        static std::vector<std::byte> FromString(const std::string&);	\
-        static std::string ToString(const std::vector<std::byte>&);		\
-																		\
-        static std::vector<std::byte> FromType(const Type& input);		\
-        static Type ToType(const std::vector<std::byte>& input);		\
+        static void* FromString(const std::string&);					\
+        static std::string ToString(const void*);								\
+        static void Destroy(void*);										\
     private:															\
         static inline bool _reg = []{									\
             DynamicConverter::Register(									\
                 alias,													\
                 &StaticConverter<Type>::FromString,						\
-                &StaticConverter<Type>::ToString						\
+                &StaticConverter<Type>::ToString,						\
+                &StaticConverter<Type>::Destroy							\
             );															\
 																		\
             return true;												\
         }();															\
     };																	\
 
-		typedef std::vector<std::byte>(*FromStringFunction)(const std::string&);
+		typedef void*(*FromStringFunction)(const std::string&);
+		typedef std::string(*ToStringFunction)(const void*);
+		typedef void(*DestroyFunction)(void*);
+		struct DynamicConverter {
+			static inline std::unordered_map<std::string, FromStringFunction> FromString{};
+			static inline std::unordered_map<std::string, ToStringFunction> ToString{};
+			static inline std::unordered_map<std::string, DestroyFunction> Destroy{};
+			static void Register(const std::string& key, FromStringFunction fromFunc, ToStringFunction toFunc, DestroyFunction destroyFunc);
+		};
+
+	};
+};
+
+		/*typedef std::vector<std::byte>(*FromStringFunction)(const std::string&);
 		typedef std::string(*ToStringFunction)(const std::vector<std::byte>&);
 		struct DynamicConverter {
 			static inline std::unordered_map<std::string, FromStringFunction> FromString{};
 			static inline std::unordered_map<std::string, ToStringFunction> ToString{};
 			static void Register(const std::string& key, FromStringFunction fromFunc, ToStringFunction toFunc);
-		};
-	};
-};
+		};*/
 
+		//template<typename T>
+		//struct StaticConverter {
+		//	static inline std::vector<std::byte> FromString(const std::string& input) {
+		//		static_assert(dependent_false<T>::value, "Converter<T>::FromString(const std::string&) is not implemented for this type T.");
+		//	}
+
+		//	static inline std::string ToString(const std::vector<std::byte>& input) {
+		//		static_assert(dependent_false<T>::value, "Converter<T>::ToString(const std::vector<std::byte>&) is not implemented for this type T.");
+		//	}
+
+		//	static inline std::vector<std::byte> FromType(const T& input) {
+		//		static_assert(dependent_false<T>::value, "Converter<T>::ToBytes(const T&) is not implemented for this type T.");
+		//	}
+
+		//	static inline T ToType(const std::vector<std::byte>& input) {
+		//		static_assert(dependent_false<T>::value, "Converter<T>::ToType(const std::vector<std::byte>&) is not implemented for this type T.");
+		//	}
+		//private:
+		//	static inline bool _reg;
+		//};
+
+//#define HRTDS_DATA_STATIC_CONVERTER(Type, alias)						\
+//    template<>															\
+//    struct hrtds::data::StaticConverter<Type> {							\
+//        static std::vector<std::byte> FromString(const std::string&);	\
+//        static std::string ToString(const std::vector<std::byte>&);		\
+//																		\
+//        static std::vector<std::byte> FromType(const Type& input);		\
+//        static Type ToType(const std::vector<std::byte>& input);		\
+//    private:															\
+//        static inline bool _reg = []{									\
+//            DynamicConverter::Register(									\
+//                alias,													\
+//                &StaticConverter<Type>::FromString,						\
+//                &StaticConverter<Type>::ToString						\
+//            );															\
+//																		\
+//            return true;												\
+//        }();															\
+//    };																	\

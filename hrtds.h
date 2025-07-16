@@ -12,37 +12,6 @@ namespace hrtds {
 		std::vector<size_t> RetrieveSameLevelSeparators(const std::string& content);
 	};	
 
-	namespace config {
-		struct IdenifierLiterals {
-			static inline const std::string STRUCT_IDENTIFIER = "struct";
-		};
-
-		struct GlyphLiterals {
-			static inline const std::string BEGIN_FILE_SCOPE = "${";
-			static inline const std::string END_FILE_SCOPE = "}$";
-		};
-
-		struct Glyph {
-			static constexpr char BEGIN_SCOPE = '{';
-			static constexpr char BEGIN_TUPLE = '(';
-			static constexpr char BEGIN_ARRAY = '[';
-			static constexpr char END_SCOPE = '}';
-			static constexpr char END_ARRAY = ']';
-			static constexpr char END_TUPLE = ')';
-
-			static constexpr char IDENTIFIER = '&';
-			static constexpr char ASSIGNMENT = ':';
-			static constexpr char TERMINATOR = ';';
-
-			static constexpr char QUOTE = '\"';
-			static constexpr char LIST_SEPARATOR = ',';
-
-			static constexpr char WHITESPACE_SPACE = ' ';
-			static constexpr char WHITESPACE_NEWLINE = '\n';
-			static constexpr char WHITESPACE_TAB = '\t';
-		};
-	};
-
 	namespace tokenizer {
 		enum class TokenType {
 			IDENTIFIER,		// &...&
@@ -183,7 +152,7 @@ namespace hrtds {
 		Value() = default;
 		Value(Value&& other) noexcept;
 		Value(const Value& other) = delete;
-		~Value() = default;
+		~Value();
 
 		Value& operator=(Value&& other) noexcept;
 		Value& operator=(const Value& other) = delete;
@@ -197,18 +166,20 @@ namespace hrtds {
 		std::vector<Value>& GetChildren();
 		const std::vector<Value>& GetChildren() const;
 
+		size_t size();
+
 		void SetLayout(StructureLayout layout);
 		const StructureLayout& GetLayout() const;
 
 		template<typename T>
 		T Get();
 
-		const std::vector<std::byte>& Get() const;
+		const void* Get() const;
 
 		template<typename T>
-		void Set(T data);
+		void Set(T* data);
 
-		void Set(std::vector<std::byte> data);
+		void Set(void* data);
 
 		static hrtds::Value Parse(Identifier& identifier, tokenizer::Token& valueToken, const HRTDS& hrtds);
 		static std::string Compose(const Value& value, int level);
@@ -217,7 +188,7 @@ namespace hrtds {
 		Identifier identifier;
 
 		// For storing raw data
-		std::vector<std::byte> data;
+		void* data;
 
 		// For storing a tuple or array
 		std::vector<Value> children;
@@ -229,18 +200,13 @@ namespace hrtds {
 	template<typename T>
 	inline T Value::Get()
 	{
-		return data::StaticConverter<T>::ToType(this->data);
+		return *reinterpret_cast<T*>(this->data);
 	}
 
 	template<typename T>
-	inline void Value::Set(T data) {
+	inline void Value::Set(T* data) {
 		this->children.clear();
-		this->data = data::StaticConverter<T>::FromType(data);
-	}
-
-	inline void Value::Set(std::vector<std::byte> data) {
-		this->children.clear();
-		this->data = data;
+		this->data = reinterpret_cast<void*>(data);
 	}
 
 	// The main class, this is the root of the file structure
@@ -259,7 +225,7 @@ namespace hrtds {
 	//		  |
 	//		  |		   <name>		   <value>
 	//		  \-------["value3"]-----> Value
-	//     
+	//
 
 	class HRTDS
 	{
@@ -277,7 +243,7 @@ namespace hrtds {
 		const std::unordered_map<std::string, StructureLayout>& GetDeclaredStructures() const;
 		const std::vector<std::string>& GetStructureOrder() const;
 
-		void DefineField(const std::string& name, Value value);
+		void DefineField(const std::string& name, Value&& value);
 		Value* RetrieveFieldDefinition(const std::string& name);
 		Value& operator[](const std::string& name);
 		const std::unordered_map<std::string, Value>& GetFields() const;

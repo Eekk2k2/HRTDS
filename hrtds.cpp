@@ -1,5 +1,7 @@
 #include "hrtds.h"
 
+#include ".\hrtds_config.h"
+
 #include <algorithm>
 #include <stdexcept>
 
@@ -381,7 +383,6 @@ hrtds::Identifier::Identifier(const Identifier& other)
 	, valid(other.valid)
 {}
 
-
 hrtds::Identifier& hrtds::Identifier::operator=(Identifier&& other) noexcept
 {
 	if (this == &other) {
@@ -578,6 +579,17 @@ hrtds::Value::Value(Value&& other) noexcept
 	, fieldMap(std::move(other.fieldMap))
 {}
 
+hrtds::Value::~Value()
+{
+	if (this->identifier.GetIdentifierType() != IdentifierType::TUPLE &&
+		!this->identifier.isArray()	&&
+		!this->identifier.GetIdentifierName().empty()
+	) {
+		std::string identifierName = this->identifier.GetIdentifierName();
+		data::DynamicConverter::Destroy[identifierName](this->data);
+	}
+}
+
 hrtds::Value& hrtds::Value::operator=(Value&& other) noexcept
 {
 	if (this == &other) {
@@ -624,6 +636,11 @@ const std::vector<hrtds::Value>& hrtds::Value::GetChildren() const
 	return this->children;
 }
 
+size_t hrtds::Value::size()
+{
+	return this->children.size();
+}
+
 void hrtds::Value::SetLayout(StructureLayout layout)
 {
 	this->layout = layout;
@@ -640,9 +657,15 @@ const hrtds::StructureLayout& hrtds::Value::GetLayout() const
 	return this->layout;
 }
 
-const std::vector<std::byte>& hrtds::Value::Get() const
+const void* hrtds::Value::Get() const
 {
 	return this->data;
+}
+
+void hrtds::Value::Set(void* data)
+{
+	this->children.clear();
+	this->data = data;
 }
 
 hrtds::Value hrtds::Value::Parse(Identifier& identifier, tokenizer::Token& valueToken, const HRTDS& hrtds)
@@ -694,7 +717,7 @@ hrtds::Value hrtds::Value::Parse(Identifier& identifier, tokenizer::Token& value
 			break;
 		}
 		case IdentifierType::BUILTIN: {
-			std::vector<std::byte> data = data::DynamicConverter::FromString[identifier.GetIdentifierName()](
+			void* data = data::DynamicConverter::FromString[identifier.GetIdentifierName()](
 				valueToken.GetData()
 			);
 
@@ -800,7 +823,7 @@ const std::vector<std::string>& hrtds::HRTDS::GetStructureOrder() const
 	return this->structureOrder;
 }
 
-void hrtds::HRTDS::DefineField(const std::string& name, Value value)
+void hrtds::HRTDS::DefineField(const std::string& name, Value&& value)
 {
 	this->fields[name] = std::move(value);
 	this->fieldOrder.push_back(name);
