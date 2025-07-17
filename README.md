@@ -13,10 +13,10 @@ A modern and lightweight format for hierarchical, strongly-typed data.
 1. Download the latest release files.
 2. Extract the file to any location you prefer
 3. Move the files from the `include/` folder over into *your* projects include folder.
->The hrtds.h file has to exist in your root include folder. (You should only need to write: #include <hrtds.h>)
+> I would recommend moving them under `/hrtds/`, making it so that when you include the `hrtds.h` file you write `include <hrtds/hrtds.h`. This will make it easier for other people in the future creating type support in their libraries. 
 4.  Link the compiled library 
 	- Either build the files in `build/src/`, or
-	- Use the prebuilt `.lib` from `library/`, or 
+	- Use the prebuilt `.lib` from `library/` (Windows x64 only), or 
 	- Include the files in `build/src/` in your project.
 5. Include by writing `#include <hrtds.h>` and start using the library. If you need some help I encourage you to check out the *# Docs*. 
 
@@ -68,10 +68,10 @@ ${
 
 struct Vector2i {
 	int x, y;
-}
+};
 
 int main() {
-	// Load from file or recieve from network
+	// Load from file or receive from network
 	hrtds::HRTDS file = hrtds::HRTDS();
 	std::string content = ...;
 	
@@ -103,9 +103,9 @@ int main() {
 ### Syntax / Tutorial
 
 **1. Setting the boundaries**
-Begin by defining the the file scope to indicate which region will be parsed. This is done through the `hrtds::config::Glyph::BEGIN_FILE_SCOPE` and `hrtds::config::Glyph::BEGIN_FILE_SCOPE` glyph literals. 
+Begin by defining the file scope to indicate which region will be parsed. This is done through the `hrtds::config::Glyph::BEGIN_FILE_SCOPE` and `hrtds::config::Glyph::END_FILE_SCOPE` glyph literals. 
 
-> In the standard implementation these look like `${` and `}$`, respectively. However  in a custom one be whatever. (This also applies to any other glyph used in parsing, such as `&`, `;`, `[`, etc)
+> In the standard implementation these look like `${` and `}$`, respectively. However in a custom one be whatever. (This also applies to any other glyph used in parsing, such as `&`, `;`, `[`, etc)
 
 \
 *example.hrtds*:
@@ -345,7 +345,46 @@ private:
 
 \
 **Adding Support - The Source File**
+Copy-paste this snippet over to your source file, replace `YOUR_TYPE` with your actual type, and fill in the functions.
+```cpp
+void* hrtds::data::StaticConverter<YOUR_TYPE>::FromString(const std::string& input)
+{
+	
+}
+
+std::string hrtds::data::StaticConverter<YOUR_TYPE>::ToString(const void* data) 
+{
+	
+}
+
+void hrtds::data::StaticConverter<YOUR_TYPE>::Destroy(void* data) 
+{
+
+}
+```
+This is how it would look like with our example:
+```cpp
+#include "mytype.h"
+
 ...
+
+void* hrtds::data::StaticConverter<MyType>::FromString(const std::string& input)
+{
+	...
+}
+
+std::string hrtds::data::StaticConverter<MyType>::ToString(const void* data) 
+{
+	...
+}
+
+void hrtds::data::StaticConverter<MyType>::Destroy(void* data) 
+{
+	delete ...;
+}
+```
+And then you are good to go. 
+
 ### API Reference 
 ### `hrtds::HRTDS`
 
@@ -358,20 +397,22 @@ private:
 
 ### `hrtds::Value`
 
--   `template<typename T> T Get()`: Retrieves the stored bytes of Value to type T. Currently no type verification.
+-   `template<typename T> T* Get()`: Retrieves the `void* hrtds::Value::data` cast to a `T*`. Currently no type verification.
 
- - `const std::vector<std::byte>& Get()`: Retrieves the stored bytes of Value. 
+ - `const void* Get() const`: Retrieves the raw `void` data pointer. 
 
-- `template<typename T> T Set(T data)`: Sets the bytes of Value from data of type T. No type verification.  
+- `template<typename T> void Set(T* data)`: Converts the incoming data pointer to a void* and assigns it to `hrtds::Value::data`. 
+> Any `... Value::Set..(..)`  function takes ownership of the data associated with the pointer. For this instance, this means the Value destructor will handle it's lifetime and delete the data when called.
     
-- `Set(std::vector<std::byte> data)`: Sets the bytes of Value from data.
+- `Set(void* data)`: Assigns to `hrtds::Value::data`. No type verification.
 
     
 -   `Value& operator[](size_t index)`: Return child value of value array. Use `Value::Get()` to retrieve data.
     
 -   `Value& operator[](const std::string &name)`: Access field of structure layout.
    
-   > Similar to how the `HRTDS` class works, the `Value` class has other member functions than the ones shown above, but these are also not meant for the end user to interact with. Functions such as - but not limited to - `SetIdentifier(...)`, and `SetLayout(...)`  are primarily there for the parser. Although I won't come after you if you do choose to use them. 
+   > Similar to how the `HRTDS` class works, the `Value` class has other member functions than the ones shown above, but these are also not meant for the end user to interact with. Functions such as (but not limited to) `SetIdentifier(...)`, and `SetLayout(...)`  are there * currently*  primarily for the parser. Although I won't come after you if you do choose to use them. 
+   > This is again because my time ran out. For the next releases you will be able to use them in a more supported way.
 
 
 ###  Language Support
@@ -380,7 +421,10 @@ This library was developed and tested using **C++20** with **MSVC 2022 (x64)** o
 
 ## Contributing
 
-### Supporting ❣️ 
+If you spot a bug, have a feature idea, or just want to tweak something, feel free to fork the repo and go wild. When you’re happy with your changes, open a pull request. I’ll take a look, leave feedback, and merge anything that makes HRTDS better. Issues, questions, or random musings are all welcome too.
 
-## Licence
-See `LICENSE` for details.
+### Supporting ❣️ 
+If you want to support this project I highly encourage you to star, share, use, and otherwise interact with the repo. 
+
+## License
+See `LICENSE` for details. (MIT license)
