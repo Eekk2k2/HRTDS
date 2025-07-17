@@ -1,30 +1,20 @@
 #pragma once
 #include ".\data\hrtds_data.h"
-#include ".\data\hrtds_misc.h"
-#include ".\data\hrtds_decimal.h"
-#include ".\data\hrtds_integral.h"
 
 namespace hrtds {
-	namespace utils {
-		// https://stackoverflow.com/questions/216823/how-to-trim-a-stdstring
-		void Trim(std::string& s);
-
-		std::vector<size_t> RetrieveSameLevelSeparators(const std::string& content);
-	};	
-
 	namespace tokenizer {
 		enum class TokenType {
-			IDENTIFIER,		// &...&
-			DEFINING,		// &...:
-			DECLARING,		// &...,
-			VALUE,			// :...;
+			IDENTIFIER,
+			DEFINING,
+			DECLARING,
+			VALUE,	
 		};
 
 		enum class ValueType {
-			SCOPE,	// {...}
-			ARRAY,	// [...]
-			TUPLE,	// (...)
-			DATA	// ...
+			SCOPE,
+			ARRAY,
+			TUPLE,
+			DATA
 		};
 
 		class Token {
@@ -172,7 +162,7 @@ namespace hrtds {
 		const StructureLayout& GetLayout() const;
 
 		template<typename T>
-		T Get();
+		T* Get();
 
 		const void* Get() const;
 
@@ -198,9 +188,9 @@ namespace hrtds {
 	};
 
 	template<typename T>
-	inline T Value::Get()
+	inline T* Value::Get()
 	{
-		return *reinterpret_cast<T*>(this->data);
+		return reinterpret_cast<T*>(this->data);
 	}
 
 	template<typename T>
@@ -210,7 +200,7 @@ namespace hrtds {
 	}
 
 	// The main class, this is the root of the file structure
-	//     
+	//  
 	//	    <root>
 	//		HRTDS 
 	//		  |
