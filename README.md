@@ -227,6 +227,7 @@ A step beyond the in-file data schemas, lies the extensibility of the type syste
 
 \
 **The system**
+
 HRTDS handles types through three functions found in the templated `StaticConverter<T>` struct: 
 ```cpp
 // This function is used for converting from the input value 
